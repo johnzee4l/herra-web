@@ -1,0 +1,31 @@
+# Dependencies
+node_modules
+
+# Build artifacts
+.next
+.next_*
+.next_bak_*
+.next_old_*
+
+# Testing
+coverage
+.nyc_output
+
+# Misc
+.DS_Store
+*.pem
+.env*.local
+
+# Debug
+npm-debug.log*
+yarn-debug.log*
+yarn-error.log*
+
+# Local development
+.vercel
+
+# Large files
+*.log
+*.gz
+*.zip
+*.tar

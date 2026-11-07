@@ -1,0 +1,69 @@
+/* ============ Product overrides (web_designtokens.md 10.9) ============
+   Loaded last. These change only what section 6.5 (contrast) and
+   section 9.4 (reduced motion) require. */
+
+/* Text-safe color on the text roles listed in section 6.5.
+   Fills and icons keep the mockup colors. */
+.badge.growth, .delta.up, .wk.y, .c-growth { color: var(--growth-text); }
+.badge.heat, .wk.m, .c-heat { color: var(--heat-text); }
+.badge.water, .wd .rp, .c-water { color: var(--water-text); }
+.wd.today .dn, .toast .tact, .primary-c { color: var(--primary-text); }
+
+/* Reduced motion (section 9.4, rules 3 and 8). */
+@media (prefers-reduced-motion: reduce) {
+  html { scroll-behavior: auto; }
+  .analyze-fab::before, .loc-dot::before, .loc-dot::after, .shimmer::after,
+  .marquee > div, .orbit-spin, .orb-ic, .dot.live, .skel { animation: none; }
+}
+.reduce-motion .analyze-fab::before, .reduce-motion .loc-dot::before,
+.reduce-motion .loc-dot::after, .reduce-motion .shimmer::after,
+.reduce-motion .marquee > div, .reduce-motion .orbit-spin,
+.reduce-motion .orb-ic, .reduce-motion .dot.live, .reduce-motion .skel {
+  animation: none;
+}
+
+/* Section 9.4 rule 1-2: durations divided by 4, springs become standard
+   easing. This is the build-step copy the tokens document specifies. */
+@media (prefers-reduced-motion: reduce) {
+  *, *::before, *::after {
+    transition-duration: 35ms !important;
+    animation-duration: 155ms !important;
+  }
+  .sheet, .drawer, .dialog, .menu, .toast, .btn, .chip, .iconbtn, .card.hov,
+  .seg .ind, .tabs .tind, .switch, .acc-b, .acc .chev, .mslider .mthumb,
+  .mslider .mfill, .ring .rval, .meter > i {
+    transition-timing-function: var(--ease) !important;
+  }
+}
+.reduce-motion *, .reduce-motion *::before, .reduce-motion *::after {
+  transition-duration: 35ms !important;
+  animation-duration: 155ms !important;
+}
+.reduce-motion .sheet, .reduce-motion .drawer, .reduce-motion .dialog,
+.reduce-motion .menu, .reduce-motion .toast, .reduce-motion .btn,
+.reduce-motion .chip, .reduce-motion .iconbtn, .reduce-motion .card.hov,
+.reduce-motion .seg .ind, .reduce-motion .tabs .tind, .reduce-motion .switch,
+.reduce-motion .acc-b, .reduce-motion .acc .chev, .reduce-motion .mslider .mthumb,
+.reduce-motion .mslider .mfill, .reduce-motion .ring .rval, .reduce-motion .meter > i {
+  transition-timing-function: var(--ease) !important;
+}
+
+/* The app root fills the viewport (section 0.1: no device frames). */
+html, body { height: 100%; }
+body { overflow: hidden; }
+.app-root { position: fixed; inset: 0; }
+
+/* Ring centre text is a single line: the mockup's centre labels ("Low",
+   "Medium") never wrap, and a wrapped label escapes the ring. */
+.ring .rc > span { white-space: nowrap; }
+
+/* Tailwind v4 preflight sets `--tw-ring-shadow` on every element, which
+   paints a 1px ring around rings, cards and rows. The mockup has no such
+   shadow (flat: no shadows at rest, section 2), so neutralise it. */
+*, *::before, *::after {
+  --tw-ring-shadow: 0 0 #0000;
+  --tw-ring-offset-shadow: 0 0 #0000;
+  --tw-inset-ring-shadow: 0 0 #0000;
+  --tw-shadow: 0 0 #0000;
+  --tw-shadow-colored: 0 0 #0000;
+}

@@ -1,0 +1,907 @@
+{
+  "model_id": "hi-xgb-20261107-1ea55688",
+  "n_vectors": 30,
+  "tolerance": 1e-05,
+  "vectors": [
+    {
+      "id": "G01",
+      "description": "Typical values for banana",
+      "crop_id": "banana",
+      "features": {
+        "soil_ph": 6.2,
+        "soil_clay": 28.5,
+        "soil_sand": 35.2,
+        "soil_soc": 1.8,
+        "soil_cec": 15.3,
+        "terrain_elev": 150.0,
+        "terrain_slope": 3.5,
+        "clim_precip_annual": 2150.0,
+        "clim_precip_cv": 0.45,
+        "clim_dry_months": 3.0,
+        "clim_temp_mean": 26.8,
+        "clim_temp_warm": 28.5,
+        "clim_temp_cool": 24.5
+      },
+      "expected": {
+        "class": "S3",
+        "probabilities": {
+          "NS": 0.0572199709713459,
+          "S1": 0.009921671822667122,
+          "S2": 0.05306233465671539,
+          "S3": 0.7514824271202087,
+          "S4": 0.12831366062164307
+        }
+      }
+    },
+    {
+      "id": "G02",
+      "description": "Typical values for cabbage",
+      "crop_id": "cabbage",
+      "features": {
+        "soil_ph": 6.2,
+        "soil_clay": 28.5,
+        "soil_sand": 35.2,
+        "soil_soc": 1.8,
+        "soil_cec": 15.3,
+        "terrain_elev": 150.0,
+        "terrain_slope": 3.5,
+        "clim_precip_annual": 2150.0,
+        "clim_precip_cv": 0.45,
+        "clim_dry_months": 3.0,
+        "clim_temp_mean": 26.8,
+        "clim_temp_warm": 28.5,
+        "clim_temp_cool": 24.5
+      },
+      "expected": {
+        "class": "S1",
+        "probabilities": {
+          "NS": 7.903564983280376e-05,
+          "S1": 0.9991900324821472,
+          "S2": 0.0002666451036930084,
+          "S3": 0.0003300622629467398,
+          "S4": 0.000134196161525324
+        }
+      }
+    },
+    {
+      "id": "G03",
+      "description": "Typical values for cassava",
+      "crop_id": "cassava",
+      "features": {
+        "soil_ph": 6.2,
+        "soil_clay": 28.5,
+        "soil_sand": 35.2,
+        "soil_soc": 1.8,
+        "soil_cec": 15.3,
+        "terrain_elev": 150.0,
+        "terrain_slope": 3.5,
+        "clim_precip_annual": 2150.0,
+        "clim_precip_cv": 0.45,
+        "clim_dry_months": 3.0,
+        "clim_temp_mean": 26.8,
+        "clim_temp_warm": 28.5,
+        "clim_temp_cool": 24.5
+      },
+      "expected": {
+        "class": "S3",
+        "probabilities": {
+          "NS": 0.001962723210453987,
+          "S1": 0.014456398785114288,
+          "S2": 0.18169431388378143,
+          "S3": 0.7576319575309753,
+          "S4": 0.04425462335348129
+        }
+      }
+    },
+    {
+      "id": "G04",
+      "description": "Typical values for coconut",
+      "crop_id": "coconut",
+      "features": {
+        "soil_ph": 6.2,
+        "soil_clay": 28.5,
+        "soil_sand": 35.2,
+        "soil_soc": 1.8,
+        "soil_cec": 15.3,
+        "terrain_elev": 150.0,
+        "terrain_slope": 3.5,
+        "clim_precip_annual": 2150.0,
+        "clim_precip_cv": 0.45,
+        "clim_dry_months": 3.0,
+        "clim_temp_mean": 26.8,
+        "clim_temp_warm": 28.5,
+        "clim_temp_cool": 24.5
+      },
+      "expected": {
+        "class": "S3",
+        "probabilities": {
+          "NS": 0.09980881214141846,
+          "S1": 0.016598766669631004,
+          "S2": 0.026499494910240173,
+          "S3": 0.656813383102417,
+          "S4": 0.2002796083688736
+        }
+      }
+    },
+    {
+      "id": "G05",
+      "description": "Typical values for maize",
+      "crop_id": "maize",
+      "features": {
+        "soil_ph": 6.2,
+        "soil_clay": 28.5,
+        "soil_sand": 35.2,
+        "soil_soc": 1.8,
+        "soil_cec": 15.3,
+        "terrain_elev": 150.0,
+        "terrain_slope": 3.5,
+        "clim_precip_annual": 2150.0,
+        "clim_precip_cv": 0.45,
+        "clim_dry_months": 3.0,
+        "clim_temp_mean": 26.8,
+        "clim_temp_warm": 28.5,
+        "clim_temp_cool": 24.5
+      },
+      "expected": {
+        "class": "S3",
+        "probabilities": {
+          "NS": 0.0012446591863408685,
+          "S1": 0.012964044697582722,
+          "S2": 0.2658786475658417,
+          "S3": 0.7106939554214478,
+          "S4": 0.009218690916895866
+        }
+      }
+    },
+    {
+      "id": "G06",
+      "description": "Typical values for rice",
+      "crop_id": "rice",
+      "features": {
+        "soil_ph": 6.2,
+        "soil_clay": 28.5,
+        "soil_sand": 35.2,
+        "soil_soc": 1.8,
+        "soil_cec": 15.3,
+        "terrain_elev": 150.0,
+        "terrain_slope": 3.5,
+        "clim_precip_annual": 2150.0,
+        "clim_precip_cv": 0.45,
+        "clim_dry_months": 3.0,
+        "clim_temp_mean": 26.8,
+        "clim_temp_warm": 28.5,
+        "clim_temp_cool": 24.5
+      },
+      "expected": {
+        "class": "S3",
+        "probabilities": {
+          "NS": 0.01702580787241459,
+          "S1": 0.011604043655097485,
+          "S2": 0.07620812952518463,
+          "S3": 0.7730808258056641,
+          "S4": 0.12208124250173569
+        }
+      }
+    },
+    {
+      "id": "G07",
+      "description": "Edge case values for banana",
+      "crop_id": "banana",
+      "features": {
+        "soil_ph": 4.5,
+        "soil_clay": 55.0,
+        "soil_sand": 15.0,
+        "soil_soc": 0.5,
+        "soil_cec": 8.0,
+        "terrain_elev": 500.0,
+        "terrain_slope": 15.0,
+        "clim_precip_annual": 3500.0,
+        "clim_precip_cv": 0.8,
+        "clim_dry_months": 6.0,
+        "clim_temp_mean": 29.5,
+        "clim_temp_warm": 32.0,
+        "clim_temp_cool": 26.0
+      },
+      "expected": {
+        "class": "S2",
+        "probabilities": {
+          "NS": 0.001226885593496263,
+          "S1": 0.036088645458221436,
+          "S2": 0.7998747229576111,
+          "S3": 0.15357279777526855,
+          "S4": 0.009236973710358143
+        }
+      }
+    },
+    {
+      "id": "G08",
+      "description": "Edge case values for cabbage",
+      "crop_id": "cabbage",
+      "features": {
+        "soil_ph": 4.5,
+        "soil_clay": 55.0,
+        "soil_sand": 15.0,
+        "soil_soc": 0.5,
+        "soil_cec": 8.0,
+        "terrain_elev": 500.0,
+        "terrain_slope": 15.0,
+        "clim_precip_annual": 3500.0,
+        "clim_precip_cv": 0.8,
+        "clim_dry_months": 6.0,
+        "clim_temp_mean": 29.5,
+        "clim_temp_warm": 32.0,
+        "clim_temp_cool": 26.0
+      },
+      "expected": {
+        "class": "S1",
+        "probabilities": {
+          "NS": 4.9284021770290565e-06,
+          "S1": 0.9992331266403198,
+          "S2": 0.0006246779230423272,
+          "S3": 8.130092464853078e-05,
+          "S4": 5.5919903388712555e-05
+        }
+      }
+    },
+    {
+      "id": "G09",
+      "description": "Edge case values for cassava",
+      "crop_id": "cassava",
+      "features": {
+        "soil_ph": 4.5,
+        "soil_clay": 55.0,
+        "soil_sand": 15.0,
+        "soil_soc": 0.5,
+        "soil_cec": 8.0,
+        "terrain_elev": 500.0,
+        "terrain_slope": 15.0,
+        "clim_precip_annual": 3500.0,
+        "clim_precip_cv": 0.8,
+        "clim_dry_months": 6.0,
+        "clim_temp_mean": 29.5,
+        "clim_temp_warm": 32.0,
+        "clim_temp_cool": 26.0
+      },
+      "expected": {
+        "class": "S2",
+        "probabilities": {
+          "NS": 0.0002533122315071523,
+          "S1": 0.0398942194879055,
+          "S2": 0.8749313354492188,
+          "S3": 0.08273046463727951,
+          "S4": 0.002190632978454232
+        }
+      }
+    },
+    {
+      "id": "G10",
+      "description": "Edge case values for coconut",
+      "crop_id": "coconut",
+      "features": {
+        "soil_ph": 4.5,
+        "soil_clay": 55.0,
+        "soil_sand": 15.0,
+        "soil_soc": 0.5,
+        "soil_cec": 8.0,
+        "terrain_elev": 500.0,
+        "terrain_slope": 15.0,
+        "clim_precip_annual": 3500.0,
+        "clim_precip_cv": 0.8,
+        "clim_dry_months": 6.0,
+        "clim_temp_mean": 29.5,
+        "clim_temp_warm": 32.0,
+        "clim_temp_cool": 26.0
+      },
+      "expected": {
+        "class": "S3",
+        "probabilities": {
+          "NS": 0.002280441578477621,
+          "S1": 0.22096924483776093,
+          "S2": 0.29151391983032227,
+          "S3": 0.45963674783706665,
+          "S4": 0.025599684566259384
+        }
+      }
+    },
+    {
+      "id": "G11",
+      "description": "Edge case values for maize",
+      "crop_id": "maize",
+      "features": {
+        "soil_ph": 4.5,
+        "soil_clay": 55.0,
+        "soil_sand": 15.0,
+        "soil_soc": 0.5,
+        "soil_cec": 8.0,
+        "terrain_elev": 500.0,
+        "terrain_slope": 15.0,
+        "clim_precip_annual": 3500.0,
+        "clim_precip_cv": 0.8,
+        "clim_dry_months": 6.0,
+        "clim_temp_mean": 29.5,
+        "clim_temp_warm": 32.0,
+        "clim_temp_cool": 26.0
+      },
+      "expected": {
+        "class": "S2",
+        "probabilities": {
+          "NS": 0.0001189156828331761,
+          "S1": 0.018740670755505562,
+          "S2": 0.9312487840652466,
+          "S3": 0.04877990484237671,
+          "S4": 0.0011117163812741637
+        }
+      }
+    },
+    {
+      "id": "G12",
+      "description": "Edge case values for rice",
+      "crop_id": "rice",
+      "features": {
+        "soil_ph": 4.5,
+        "soil_clay": 55.0,
+        "soil_sand": 15.0,
+        "soil_soc": 0.5,
+        "soil_cec": 8.0,
+        "terrain_elev": 500.0,
+        "terrain_slope": 15.0,
+        "clim_precip_annual": 3500.0,
+        "clim_precip_cv": 0.8,
+        "clim_dry_months": 6.0,
+        "clim_temp_mean": 29.5,
+        "clim_temp_warm": 32.0,
+        "clim_temp_cool": 26.0
+      },
+      "expected": {
+        "class": "S2",
+        "probabilities": {
+          "NS": 0.00028291245689615607,
+          "S1": 0.03710465505719185,
+          "S2": 0.8680952787399292,
+          "S3": 0.09073076397180557,
+          "S4": 0.003786348970606923
+        }
+      }
+    },
+    {
+      "id": "G13",
+      "description": "Missing data case for banana",
+      "crop_id": "banana",
+      "features": {
+        "soil_ph": 6.2,
+        "soil_clay": 28.5,
+        "soil_sand": null,
+        "soil_soc": 1.8,
+        "soil_cec": 15.3,
+        "terrain_elev": null,
+        "terrain_slope": 3.5,
+        "clim_precip_annual": 2150.0,
+        "clim_precip_cv": 0.45,
+        "clim_dry_months": null,
+        "clim_temp_mean": 26.8,
+        "clim_temp_warm": 28.5,
+        "clim_temp_cool": 24.5
+      },
+      "expected": {
+        "class": "S3",
+        "probabilities": {
+          "NS": 0.1038438156247139,
+          "S1": 0.012259281240403652,
+          "S2": 0.014761202968657017,
+          "S3": 0.5786146521568298,
+          "S4": 0.2905210554599762
+        }
+      }
+    },
+    {
+      "id": "G14",
+      "description": "Missing data case for cabbage",
+      "crop_id": "cabbage",
+      "features": {
+        "soil_ph": 6.2,
+        "soil_clay": 28.5,
+        "soil_sand": null,
+        "soil_soc": 1.8,
+        "soil_cec": 15.3,
+        "terrain_elev": null,
+        "terrain_slope": 3.5,
+        "clim_precip_annual": 2150.0,
+        "clim_precip_cv": 0.45,
+        "clim_dry_months": null,
+        "clim_temp_mean": 26.8,
+        "clim_temp_warm": 28.5,
+        "clim_temp_cool": 24.5
+      },
+      "expected": {
+        "class": "S1",
+        "probabilities": {
+          "NS": 0.0047951070591807365,
+          "S1": 0.9794812202453613,
+          "S2": 0.002543880371376872,
+          "S3": 0.0055465297773480415,
+          "S4": 0.00763331912457943
+        }
+      }
+    },
+    {
+      "id": "G15",
+      "description": "Missing data case for cassava",
+      "crop_id": "cassava",
+      "features": {
+        "soil_ph": 6.2,
+        "soil_clay": 28.5,
+        "soil_sand": null,
+        "soil_soc": 1.8,
+        "soil_cec": 15.3,
+        "terrain_elev": null,
+        "terrain_slope": 3.5,
+        "clim_precip_annual": 2150.0,
+        "clim_precip_cv": 0.45,
+        "clim_dry_months": null,
+        "clim_temp_mean": 26.8,
+        "clim_temp_warm": 28.5,
+        "clim_temp_cool": 24.5
+      },
+      "expected": {
+        "class": "S3",
+        "probabilities": {
+          "NS": 0.0065484256483614445,
+          "S1": 0.03159131482243538,
+          "S2": 0.05400814861059189,
+          "S3": 0.7813398241996765,
+          "S4": 0.1265123039484024
+        }
+      }
+    },
+    {
+      "id": "G16",
+      "description": "Missing data case for coconut",
+      "crop_id": "coconut",
+      "features": {
+        "soil_ph": 6.2,
+        "soil_clay": 28.5,
+        "soil_sand": null,
+        "soil_soc": 1.8,
+        "soil_cec": 15.3,
+        "terrain_elev": null,
+        "terrain_slope": 3.5,
+        "clim_precip_annual": 2150.0,
+        "clim_precip_cv": 0.45,
+        "clim_dry_months": null,
+        "clim_temp_mean": 26.8,
+        "clim_temp_warm": 28.5,
+        "clim_temp_cool": 24.5
+      },
+      "expected": {
+        "class": "S4",
+        "probabilities": {
+          "NS": 0.15928949415683746,
+          "S1": 0.08703283220529556,
+          "S2": 0.007216217927634716,
+          "S3": 0.3645365536212921,
+          "S4": 0.38192492723464966
+        }
+      }
+    },
+    {
+      "id": "G17",
+      "description": "Missing data case for maize",
+      "crop_id": "maize",
+      "features": {
+        "soil_ph": 6.2,
+        "soil_clay": 28.5,
+        "soil_sand": null,
+        "soil_soc": 1.8,
+        "soil_cec": 15.3,
+        "terrain_elev": null,
+        "terrain_slope": 3.5,
+        "clim_precip_annual": 2150.0,
+        "clim_precip_cv": 0.45,
+        "clim_dry_months": null,
+        "clim_temp_mean": 26.8,
+        "clim_temp_warm": 28.5,
+        "clim_temp_cool": 24.5
+      },
+      "expected": {
+        "class": "S3",
+        "probabilities": {
+          "NS": 0.005229797214269638,
+          "S1": 0.0174318328499794,
+          "S2": 0.13127070665359497,
+          "S3": 0.823974609375,
+          "S4": 0.022093012928962708
+        }
+      }
+    },
+    {
+      "id": "G18",
+      "description": "Missing data case for rice",
+      "crop_id": "rice",
+      "features": {
+        "soil_ph": 6.2,
+        "soil_clay": 28.5,
+        "soil_sand": null,
+        "soil_soc": 1.8,
+        "soil_cec": 15.3,
+        "terrain_elev": null,
+        "terrain_slope": 3.5,
+        "clim_precip_annual": 2150.0,
+        "clim_precip_cv": 0.45,
+        "clim_dry_months": null,
+        "clim_temp_mean": 26.8,
+        "clim_temp_warm": 28.5,
+        "clim_temp_cool": 24.5
+      },
+      "expected": {
+        "class": "S3",
+        "probabilities": {
+          "NS": 0.049349021166563034,
+          "S1": 0.025311702862381935,
+          "S2": 0.0236748605966568,
+          "S3": 0.6062883138656616,
+          "S4": 0.29537609219551086
+        }
+      }
+    },
+    {
+      "id": "G19",
+      "description": "Random variation for banana",
+      "crop_id": "banana",
+      "features": {
+        "soil_ph": 6.762424272695972,
+        "soil_clay": 24.512507991262346,
+        "soil_sand": 41.3950693924272,
+        "soil_soc": 1.2035156650243015,
+        "soil_cec": 17.686069720254718,
+        "terrain_elev": 760.5290364280949,
+        "terrain_slope": 19.12429830666315,
+        "clim_precip_annual": 2336.1046360833966,
+        "clim_precip_cv": 0.3463613098224505,
+        "clim_dry_months": 2.0,
+        "clim_temp_mean": 25.00439194098318,
+        "clim_temp_warm": 27.1850388200979,
+        "clim_temp_cool": 27.37674777451972
+      },
+      "expected": {
+        "class": "S3",
+        "probabilities": {
+          "NS": 0.0027849578764289618,
+          "S1": 0.005128257907927036,
+          "S2": 0.2765304446220398,
+          "S3": 0.6570956707000732,
+          "S4": 0.05846068635582924
+        }
+      }
+    },
+    {
+      "id": "G20",
+      "description": "Random variation for cabbage",
+      "crop_id": "cabbage",
+      "features": {
+        "soil_ph": 7.075495150134068,
+        "soil_clay": 27.770964231519464,
+        "soil_sand": 31.871245228685115,
+        "soil_soc": 1.1396699978709814,
+        "soil_cec": 24.34640990433531,
+        "terrain_elev": 378.8705441603842,
+        "terrain_slope": 14.121870409487755,
+        "clim_precip_annual": 2593.790221023026,
+        "clim_precip_cv": 0.9809009080247129,
+        "clim_dry_months": 0.0,
+        "clim_temp_mean": 27.41780713265556,
+        "clim_temp_warm": 29.589985141480266,
+        "clim_temp_cool": 24.503881196510168
+      },
+      "expected": {
+        "class": "S1",
+        "probabilities": {
+          "NS": 4.838933818973601e-06,
+          "S1": 0.9982621073722839,
+          "S2": 0.0008110488997772336,
+          "S3": 0.0005350350984372199,
+          "S4": 0.000386984582291916
+        }
+      }
+    },
+    {
+      "id": "G21",
+      "description": "Random variation for cassava",
+      "crop_id": "cassava",
+      "features": {
+        "soil_ph": 5.707608875882815,
+        "soil_clay": 42.97715656243899,
+        "soil_sand": 30.807586560433748,
+        "soil_soc": 2.749747810134088,
+        "soil_cec": 22.16315942965047,
+        "terrain_elev": 980.7799361713911,
+        "terrain_slope": 5.762101977394805,
+        "clim_precip_annual": 1819.8237787967569,
+        "clim_precip_cv": 0.40433357309507184,
+        "clim_dry_months": 4.0,
+        "clim_temp_mean": 25.7351176155985,
+        "clim_temp_warm": 30.796783471044016,
+        "clim_temp_cool": 25.103853061920287
+      },
+      "expected": {
+        "class": "S3",
+        "probabilities": {
+          "NS": 0.0019815072882920504,
+          "S1": 0.026112642139196396,
+          "S2": 0.08435617387294769,
+          "S3": 0.8069375157356262,
+          "S4": 0.08061210811138153
+        }
+      }
+    },
+    {
+      "id": "G22",
+      "description": "Random variation for coconut",
+      "crop_id": "coconut",
+      "features": {
+        "soil_ph": 5.019035654566215,
+        "soil_clay": 43.65968504569636,
+        "soil_sand": 31.29194335676273,
+        "soil_soc": 1.763467425568345,
+        "soil_cec": 18.650030203359464,
+        "terrain_elev": 717.3751540623089,
+        "terrain_slope": 8.868584313117244,
+        "clim_precip_annual": 3322.917463957263,
+        "clim_precip_cv": 0.3058617612887705,
+        "clim_dry_months": 6.0,
+        "clim_temp_mean": 28.187536847962782,
+        "clim_temp_warm": 30.409266108428042,
+        "clim_temp_cool": 26.06212148931842
+      },
+      "expected": {
+        "class": "S1",
+        "probabilities": {
+          "NS": 0.005152837838977575,
+          "S1": 0.5986367464065552,
+          "S2": 0.004947429057210684,
+          "S3": 0.19949758052825928,
+          "S4": 0.1917654424905777
+        }
+      }
+    },
+    {
+      "id": "G23",
+      "description": "Random variation for maize",
+      "crop_id": "maize",
+      "features": {
+        "soil_ph": 5.031846187951658,
+        "soil_clay": 30.798579669197125,
+        "soil_sand": 49.45172407749156,
+        "soil_soc": 0.5597943895990962,
+        "soil_cec": 14.068421390488385,
+        "terrain_elev": 621.5578941196454,
+        "terrain_slope": 16.759920371489166,
+        "clim_precip_annual": 1839.2646637433913,
+        "clim_precip_cv": 0.6459738567161291,
+        "clim_dry_months": 7.0,
+        "clim_temp_mean": 28.360138191246254,
+        "clim_temp_warm": 28.53432711993343,
+        "clim_temp_cool": 26.801744618340066
+      },
+      "expected": {
+        "class": "S3",
+        "probabilities": {
+          "NS": 0.0009212095756083727,
+          "S1": 0.002749081701040268,
+          "S2": 0.37460777163505554,
+          "S3": 0.599757969379425,
+          "S4": 0.021964002400636673
+        }
+      }
+    },
+    {
+      "id": "G24",
+      "description": "Random variation for rice",
+      "crop_id": "rice",
+      "features": {
+        "soil_ph": 7.264807002900605,
+        "soil_clay": 19.934051281624196,
+        "soil_sand": 25.38426026001355,
+        "soil_soc": 2.5361546032616307,
+        "soil_cec": 19.162730139928716,
+        "terrain_elev": 164.05491064126466,
+        "terrain_slope": 8.363179292578648,
+        "clim_precip_annual": 2107.3310441308595,
+        "clim_precip_cv": 0.7229378702907723,
+        "clim_dry_months": 1.0,
+        "clim_temp_mean": 26.187299224065082,
+        "clim_temp_warm": 31.802236753681747,
+        "clim_temp_cool": 27.69032270220917
+      },
+      "expected": {
+        "class": "S3",
+        "probabilities": {
+          "NS": 0.0006261690286919475,
+          "S1": 0.017379483208060265,
+          "S2": 0.19102364778518677,
+          "S3": 0.6289026141166687,
+          "S4": 0.16206809878349304
+        }
+      }
+    },
+    {
+      "id": "G25",
+      "description": "Random variation for banana",
+      "crop_id": "banana",
+      "features": {
+        "soil_ph": 7.024518682258088,
+        "soil_clay": 24.61016408192004,
+        "soil_sand": 37.471621677525555,
+        "soil_soc": 1.0305073212061697,
+        "soil_cec": 24.501907137406445,
+        "terrain_elev": 786.7904267221583,
+        "terrain_slope": 16.099657859733856,
+        "clim_precip_annual": 3005.5112357924136,
+        "clim_precip_cv": 0.45225632880204725,
+        "clim_dry_months": 1.0,
+        "clim_temp_mean": 28.544113733787135,
+        "clim_temp_warm": 28.993748446321398,
+        "clim_temp_cool": 24.019654774479598
+      },
+      "expected": {
+        "class": "S3",
+        "probabilities": {
+          "NS": 0.0024901593569666147,
+          "S1": 0.005949459038674831,
+          "S2": 0.2804507911205292,
+          "S3": 0.6606442332267761,
+          "S4": 0.05046535283327103
+        }
+      }
+    },
+    {
+      "id": "G26",
+      "description": "Random variation for cabbage",
+      "crop_id": "cabbage",
+      "features": {
+        "soil_ph": 6.03900389255335,
+        "soil_clay": 23.519197909943024,
+        "soil_sand": 27.67235045723062,
+        "soil_soc": 2.0981448546264305,
+        "soil_cec": 23.107917686647767,
+        "terrain_elev": 166.9922914333378,
+        "terrain_slope": 18.060060011137455,
+        "clim_precip_annual": 2504.833415468915,
+        "clim_precip_cv": 0.3120516859926913,
+        "clim_dry_months": 3.0,
+        "clim_temp_mean": 28.215611218066307,
+        "clim_temp_warm": 27.781339289749873,
+        "clim_temp_cool": 26.721814384032665
+      },
+      "expected": {
+        "class": "S1",
+        "probabilities": {
+          "NS": 6.195675268827472e-06,
+          "S1": 0.9978984594345093,
+          "S2": 0.001625644275918603,
+          "S3": 0.0003649622667580843,
+          "S4": 0.00010477591422386467
+        }
+      }
+    },
+    {
+      "id": "G27",
+      "description": "Random variation for cassava",
+      "crop_id": "cassava",
+      "features": {
+        "soil_ph": 6.051457743590788,
+        "soil_clay": 30.566821693253978,
+        "soil_sand": 48.07973890928786,
+        "soil_soc": 0.8635360248264483,
+        "soil_cec": 13.767571408043963,
+        "terrain_elev": 683.2771395546652,
+        "terrain_slope": 17.365253952475094,
+        "clim_precip_annual": 3130.7124751257716,
+        "clim_precip_cv": 0.8292138319413704,
+        "clim_dry_months": 6.0,
+        "clim_temp_mean": 25.218404919990746,
+        "clim_temp_warm": 26.77651953023556,
+        "clim_temp_cool": 23.55841457336992
+      },
+      "expected": {
+        "class": "S2",
+        "probabilities": {
+          "NS": 0.00021746844868175685,
+          "S1": 0.010822822339832783,
+          "S2": 0.7739257216453552,
+          "S3": 0.21435388922691345,
+          "S4": 0.0006801218842156231
+        }
+      }
+    },
+    {
+      "id": "G28",
+      "description": "Random variation for coconut",
+      "crop_id": "coconut",
+      "features": {
+        "soil_ph": 7.427536886310942,
+        "soil_clay": 16.77591701709473,
+        "soil_sand": 55.861421085623405,
+        "soil_soc": 2.0503425561259716,
+        "soil_cec": 10.967039608466553,
+        "terrain_elev": 323.1804837213513,
+        "terrain_slope": 4.568828871320911,
+        "clim_precip_annual": 1984.5852775875894,
+        "clim_precip_cv": 0.986852713555425,
+        "clim_dry_months": 5.0,
+        "clim_temp_mean": 27.167928584426097,
+        "clim_temp_warm": 27.12120352634272,
+        "clim_temp_cool": 26.7069274188526
+      },
+      "expected": {
+        "class": "S4",
+        "probabilities": {
+          "NS": 0.05042470619082451,
+          "S1": 0.0016730485949665308,
+          "S2": 0.007262486964464188,
+          "S3": 0.44089949131011963,
+          "S4": 0.49974027276039124
+        }
+      }
+    },
+    {
+      "id": "G29",
+      "description": "Random variation for maize",
+      "crop_id": "maize",
+      "features": {
+        "soil_ph": 5.183999266199764,
+        "soil_clay": 15.926787393258685,
+        "soil_sand": 42.09980556022798,
+        "soil_soc": 0.5400341823182462,
+        "soil_cec": 12.610625855511323,
+        "terrain_elev": 409.45440254839536,
+        "terrain_slope": 12.020087593469055,
+        "clim_precip_annual": 2622.6088297922515,
+        "clim_precip_cv": 0.33931873365989007,
+        "clim_dry_months": 2.0,
+        "clim_temp_mean": 28.70414049191786,
+        "clim_temp_warm": 30.005244883284718,
+        "clim_temp_cool": 23.015036762616244
+      },
+      "expected": {
+        "class": "S2",
+        "probabilities": {
+          "NS": 0.0006752883782610297,
+          "S1": 0.015427447855472565,
+          "S2": 0.6485829949378967,
+          "S3": 0.32156020402908325,
+          "S4": 0.013754051178693771
+        }
+      }
+    },
+    {
+      "id": "G30",
+      "description": "Random variation for rice",
+      "crop_id": "rice",
+      "features": {
+        "soil_ph": 6.922173077108505,
+        "soil_clay": 15.69477518097681,
+        "soil_sand": 56.10890287389504,
+        "soil_soc": 2.6285481149611734,
+        "soil_cec": 15.874242093754319,
+        "terrain_elev": 120.49729477301851,
+        "terrain_slope": 16.099449018680538,
+        "clim_precip_annual": 2073.70063581265,
+        "clim_precip_cv": 0.5097753553670635,
+        "clim_dry_months": 1.0,
+        "clim_temp_mean": 28.76420826986736,
+        "clim_temp_warm": 28.84105358671026,
+        "clim_temp_cool": 25.137534333105354
+      },
+      "expected": {
+        "class": "S3",
+        "probabilities": {
+          "NS": 0.00399717316031456,
+          "S1": 0.00959593802690506,
+          "S2": 0.24217179417610168,
+          "S3": 0.6660948991775513,
+          "S4": 0.07814019173383713
+        }
+      }
+    }
+  ]
+}

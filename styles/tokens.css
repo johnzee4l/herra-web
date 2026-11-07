@@ -1,0 +1,108 @@
+/* ==========================================================================
+   Herra Web - tokens
+   Tailwind bridge, then the mockup token block, then the product overrides
+   and registry aliases (web_designtokens.md section 6.2).
+   Import this before globals.css.
+   ========================================================================== */
+
+@import "tailwindcss";
+
+@theme inline {
+  --color-background: var(--background);
+  --color-foreground: var(--foreground);
+  --color-surface: var(--surface);
+  --color-surface-hover: var(--surface-hover);
+  --color-popover: var(--popover);
+  --color-secondary: var(--secondary);
+  --color-muted: var(--muted);
+  --color-subtle: var(--subtle);
+  --color-border: var(--border);
+  --color-divider: var(--divider);
+  --color-primary: var(--primary);
+  --color-primary-foreground: var(--primary-fg);
+  --color-accent-tint: var(--accent-tint);
+  --color-water: var(--water);
+  --color-heat: var(--heat);
+  --color-soil: var(--soil);
+  --color-risk: var(--risk);
+  --color-growth: var(--growth);
+  --color-sky: var(--sky);
+  --color-lichen-400: var(--l400);
+  --color-lichen-700: var(--l700);
+  --color-basalt-0: var(--b0);
+  --color-basalt-100: var(--b100);
+  --color-linen-100: var(--n100);
+  --color-linen-900: var(--n900);
+  --radius-xs: var(--r-xs);
+  --radius-sm: var(--r-sm);
+  --radius-md: var(--r-md);
+  --radius-lg: var(--r-lg);
+  --radius-xl: var(--r-xl);
+  --font-display: "Urbanist", ui-rounded, "SF Pro Rounded", system-ui, sans-serif;
+  --font-sans: "Figtree", ui-rounded, system-ui, sans-serif;
+  --font-mono: "JetBrains Mono", ui-monospace, monospace;
+}
+
+/* ============ HERRA AI - Lichen & Basalt tokens ============ */
+:root{
+  --font-display:"Urbanist",ui-rounded,"SF Pro Rounded",system-ui,sans-serif;
+  --font-sans:"Figtree",ui-rounded,system-ui,sans-serif;
+  --font-mono:"JetBrains Mono",ui-monospace,monospace;
+  --l50:#F6FDE3;--l100:#EAFAC0;--l200:#DBF58F;--l300:#D0F25F;--l400:#C6F135;--l500:#A8D420;--l600:#82A814;--l700:#5F7C10;--l800:#435811;--l900:#2B3A0E;--l950:#161F06;
+  --b0:#000;--b50:#070908;--b100:#0D100E;--b200:#141815;--b300:#1D221E;--b400:#2A312B;--b500:#434B44;--b600:#6A736B;--b700:#98A19A;--b800:#C8CFC9;--b900:#E8ECE8;--b950:#F5F7F4;
+  --n0:#fff;--n50:#FAF9F5;--n100:#F4F2EC;--n200:#ECE9E0;--n300:#DEDACE;--n400:#C7C2B3;--n700:#5B6159;--n900:#101612;
+  --r-xs:6px;--r-sm:10px;--r-md:14px;--r-lg:20px;--r-xl:28px;
+  --ease:cubic-bezier(.2,0,0,1);--ease-em:cubic-bezier(.16,1,.3,1);--ease-exit:cubic-bezier(.4,0,1,1);--ease-ring:cubic-bezier(.65,0,.35,1);
+  --spring:cubic-bezier(.34,1.56,.64,1);--spring-soft:cubic-bezier(.22,1.2,.36,1);
+  --d-fast:140ms;--d-base:240ms;--d-slow:380ms;--d-hero:620ms;
+  /* light */
+  --background:var(--n100);--foreground:var(--n900);--surface:var(--n50);--surface-hover:var(--n200);--popover:var(--n0);
+  --secondary:var(--n200);--muted:var(--n700);--subtle:#7C8279;--border:var(--n300);--divider:var(--n400);
+  --primary:var(--l700);--primary-fg:#fff;--ring-focus:color-mix(in oklab,var(--l700) 60%,transparent);--accent-tint:var(--l50);
+  --water:#0E7FA0;--heat:#A8700A;--soil:#9A5530;--risk:#C02746;--growth:#5F7C10;--sky:#3A57C4;
+  --water-tint:#E3F3F8;--heat-tint:#FBF0D9;--soil-tint:#F6E7DC;--risk-tint:#FADFE4;--sky-tint:#E4E9FB;--growth-tint:#EAF3D2;
+  --scrim:#10161266;--glow:color-mix(in oklab,var(--l700) 14%,transparent);--track:var(--n300);
+  --cereal:#C9A63E;--root:#A87B4D;--legume:#6B9A57;--fruit:#CC6A47;--vegetable:#3FA67C;--plantation:#5486AB;--fiber:#8F6FB5;--herb:#7DB05F;
+  color-scheme:light;
+}
+:root[data-theme=dark]{
+  --background:var(--b0);--foreground:var(--b900);--surface:var(--b100);--surface-hover:var(--b200);--popover:var(--b100);
+  --secondary:var(--b200);--muted:var(--b700);--subtle:var(--b600);--border:var(--b300);--divider:var(--b400);
+  --primary:var(--l400);--primary-fg:#0A1000;--ring-focus:color-mix(in oklab,var(--l400) 60%,transparent);--accent-tint:var(--l950);
+  --water:#5CC8E8;--heat:#F5BC4B;--soil:#D08A5E;--risk:#F0617B;--growth:#C6F135;--sky:#9AB4FF;
+  --water-tint:#0B2832;--heat-tint:#2E2208;--soil-tint:#2D1B10;--risk-tint:#33101A;--sky-tint:#141B33;--growth-tint:#1B2508;
+  --scrim:#000000B3;--glow:color-mix(in oklab,var(--l400) 12%,transparent);--track:var(--b300);
+  --cereal:#E6C86A;--root:#C89B6D;--legume:#8FBF7A;--fruit:#E58B6A;--vegetable:#6CC6A0;--plantation:#7FA8C9;--fiber:#B79AD6;--herb:#A6D68A;
+  color-scheme:dark;
+}
+
+/* Product token overrides (section 6.2, contrast corrections in 6.5). */
+:root {
+  --subtle: #6B7069;
+  --primary-text: #5C7810;
+  --growth-text: #5B760F;
+  --heat-text: #966409;
+  --water-text: #0D7796;
+}
+:root[data-theme=dark] {
+  --subtle: #79827A;
+  --primary-text: var(--primary);
+  --growth-text: var(--growth);
+  --heat-text: var(--heat);
+  --water-text: var(--water);
+}
+
+/* Registry aliases: coss ui / shadcn read these names. */
+:root {
+  --card: var(--surface);
+  --card-foreground: var(--foreground);
+  --popover-foreground: var(--foreground);
+  --muted-foreground: var(--muted);
+  --secondary-foreground: var(--foreground);
+  --accent: var(--accent-tint);
+  --accent-foreground: var(--primary);
+  --destructive: var(--risk);
+  --input: var(--border);
+  --ring: var(--ring-focus);
+  --radius: var(--r-md);
+}

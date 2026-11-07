@@ -1,0 +1,11 @@
+import { readFileSync } from "node:fs";
+const s = readFileSync("lib/fixtures.ts", "utf8");
+const fids = [...new Set([...s.matchAll(/id:\s*"(f_[A-Za-z0-9_]+)"/g)].map((m) => m[1]))];
+const efids = [...new Set([...s.matchAll(/fieldId:\s*"(f_[A-Za-z0-9_]+)"/g)].map((m) => m[1]))];
+const owners = [...s.matchAll(/ownerId:\s*"([^"]+)"/g)].map((m) => m[1]);
+const authors = [...new Set([...s.matchAll(/authorId:\s*"([^"]+)"/g)].map((m) => m[1]))];
+console.log("FIELD ids      :", fids.join(", "));
+console.log("ENTRY fieldIds :", efids.join(", "));
+console.log("field owners   :", [...new Set(owners)].join(", "));
+console.log("entry authors  :", authors.join(", "));
+console.log("missing field for entry:", efids.filter((x) => !fids.includes(x)).join(", ") || "(none)");
