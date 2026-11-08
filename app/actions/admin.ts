@@ -127,33 +127,65 @@ export async function rollbackModel(data: z.infer<typeof rollbackModelSchema>) {
   };
 }
 
-export async function updateCropConfig(
-  cropId: string,
-  updates: { thresholds?: any; metadata?: any; active?: boolean }
-) {
+/* Readiness thresholds edited on the Crop catalog screen. They are stored as a
+   hi_config override layer keyed by crop id, so the ML crop roster (hi_config
+   'crops') stays the source of truth for the model tier. */
+export interface CropThresholdEdit {
+  water?: "low" | "moderate" | "high";
+  heat?: number;
+  cold?: number;
+  wind?: number;
+  ideal?: number;
+  ph?: [number, number];
+  clay?: [number, number];
+}
+
+export async function updateCropConfig(cropId: string, updates: CropThresholdEdit) {
   const supabase = await supabaseServer();
   const admin = supabaseAdmin();
 
+  const user = (await supabase.auth.getUser()).data.user;
+  if (!user) return { error: "Unauthorized" };
+
   // Check admin role
-  const { data: profile } = await supabase
-    .from("profiles")
-    .select("role")
-    .eq("id", (await supabase.auth.getUser()).data.user!.id)
-    .single();
+  const { data: profile } = await supabase.from("profiles").select("role").eq("id", user.id).single();
 
   if (!profile || profile.role !== "admin") {
     return { error: "Unauthorized" };
   }
 
-  const data: Record<string, any> = {};
-  if (updates.thresholds) data.thresholds = updates.thresholds;
-  if (updates.metadata) data.metadata = updates.metadata;
-  if (updates.active !== undefined) data.active = updates.active;
+  if (updates.ph && updates.ph[0] > updates.ph[1]) {
+    return { error: "The pH minimum must not exceed the maximum" };
+  }
+  if (updates.clay && updates.clay[0] > updates.clay[1]) {
+    return { error: "The clay minimum must not exceed the maximum" };
+  }
+  if (updates.cold != null && updates.heat != null && updates.cold >= updates.heat) {
+    return { error: "The cold limit must sit below the heat limit" };
+  }
 
-  const { error } = await admin
+  const { data: configRows, error: readError } = await admin
     .from("hi_config")
-    .update(data)
-    .eq("crop_id", cropId);
+    .select("*")
+    .in("key", ["crop_overrides", "crops_version"]);
+
+  if (readError) {
+    return { error: readError.message };
+  }
+
+  const rows = (configRows ?? []) as { key: string; value: unknown }[];
+  const saved = rows.find((r) => r.key === "crop_overrides")?.value;
+  const stored = saved && typeof saved === "object" ? (saved as Record<string, Record<string, unknown>>) : {};
+  const previous = Number(rows.find((r) => r.key === "crops_version")?.value);
+  const version = (Number.isFinite(previous) && previous > 0 ? previous : 7) + 1;
+
+  const { error } = await admin.from("hi_config").upsert(
+    [
+      { key: "crop_overrides", value: { ...stored, [cropId]: { ...(stored[cropId] ?? {}), ...updates } } },
+      { key: "crops_version", value: version },
+    ],
+    { onConflict: "key" }
+  );
 
   if (error) {
     return { error: error.message };
@@ -161,15 +193,15 @@ export async function updateCropConfig(
 
   // Write audit log
   await admin.from("audit_log").insert({
-    actor_id: (await supabase.auth.getUser()).data.user!.id,
-    action: "crop_config.update",
-    target_type: "crop_config",
+    actor_id: user.id,
+    action: "update_crop_thresholds",
+    target_type: "hi_config",
     target_id: cropId,
     meta: updates,
   });
 
   revalidatePath("/admin/crops");
-  return { success: true };
+  return { success: true, version };
 }
 
 export async function updateHealthWeights(weights: {
@@ -240,10 +272,11 @@ export async function updateAdvisoryRule(
     return { error: "Unauthorized" };
   }
 
+  /* The console identifies a rule by its trigger code; the uuid is internal. */
   const { error } = await admin
     .from("advisory_rules")
-    .update(updates)
-    .eq("id", ruleId);
+    .update({ ...updates, updated_at: new Date().toISOString() })
+    .eq("trigger_code", ruleId);
 
   if (error) {
     return { error: error.message };

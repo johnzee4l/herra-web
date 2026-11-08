@@ -1,7 +1,9 @@
 "use server";
 
 /* Assessment actions (Blueprint section 9.2)
-   Run assessments, store results, handle reruns */
+   The only path that produces an assessment. It builds the environmental
+   profile from the grid, fetches the real forecast, runs the champion model in
+   process, and stores the returned response. */
 
 import { revalidatePath } from "next/cache";
 import { supabaseServer, supabaseAdmin } from "@/lib/supabase/client";
@@ -17,185 +19,186 @@ const assessmentSchema = z.object({
   currentCrop: z.string().optional(),
   photoPath: z.string().optional(),
   idempotencyKey: z.string().uuid(),
+  rerunOf: z.string().uuid().optional(),
 });
 
-// Health weights - admin-editable in production (Blueprint 9.2, ML 14.7 defaults)
-const HEALTH_WEIGHTS = { fit: 0.45, water: 0.25, thermal: 0.15, soil: 0.15 };
+const healthWeights = { fit: 0.45, water: 0.25, thermal: 0.15, soil: 0.15 };
+
+function parseGeo(value: unknown) {
+  if (!value) return null;
+  return typeof value === "string" ? JSON.parse(value) : value;
+}
 
 export async function runAssessment(data: z.infer<typeof assessmentSchema>) {
-  const result = assessmentSchema.safeParse(data);
-  if (!result.success) {
-    return { error: result.error.errors[0].message };
+  const parsed = assessmentSchema.safeParse(data);
+  if (!parsed.success) {
+    return { error: parsed.error.errors[0].message };
   }
 
   const supabase = await supabaseServer();
   const admin = supabaseAdmin();
-  const { data: { user } } = await supabase.auth.getUser();
+  const {
+    data: { user },
+  } = await supabase.auth.getUser();
 
-  if (!user) {
-    return { error: "Unauthorized" };
-  }
+  if (!user) return { error: "Unauthorized" };
 
-  // Check idempotency - if this key exists, return the existing assessment
   const { data: existing } = await supabase
     .from("assessments")
     .select("id")
-    .eq("idempotency_key", result.data.idempotencyKey)
+    .eq("idempotency_key", parsed.data.idempotencyKey)
     .maybeSingle();
 
-  if (existing) {
-    return { success: true, assessmentId: existing.id };
-  }
+  if (existing) return { success: true, assessmentId: existing.id };
 
-  // Check hourly quota (Blueprint 5.2)
-  const { data: quotaCheck } = await supabase.rpc("check_assessment_quota", {
+  const { data: quotaOk, error: quotaError } = await supabase.rpc("check_assessment_quota", {
     user_uuid: user.id,
   });
+  if (quotaError) return { error: quotaError.message };
+  if (!quotaOk) return { error: "Assessment quota exceeded. Maximum 30 per hour." };
 
-  if (!quotaCheck) {
-    return { error: "Assessment quota exceeded. Maximum 30 per hour." };
-  }
-
-  // Get field with geometry
   const { data: fieldRow, error: fieldError } = await supabase
-    .from("fields")
-    .select("*, geom_geojson:st_asgeojson(geom), centroid_geojson:st_asgeojson(centroid)")
-    .eq("id", result.data.fieldId)
+    .from("fields_geo")
+    .select(
+      "id,space_id,owner_id,name,area_ha,current_crop,place,thumb,geom_geojson,centroid_geojson"
+    )
+    .eq("id", parsed.data.fieldId)
     .single();
 
-  if (fieldError || !fieldRow) {
-    return { error: "Field not found" };
-  }
+  if (fieldError || !fieldRow) return { error: "Field not found" };
 
-  // Check ownership or space membership
   if (fieldRow.owner_id !== user.id) {
     const { data: membership } = await supabase
       .from("space_members")
       .select("space_id")
       .eq("space_id", fieldRow.space_id)
       .eq("user_id", user.id)
-      .single();
-
-    if (!membership) {
-      return { error: "Unauthorized" };
-    }
+      .maybeSingle();
+    if (!membership) return { error: "Unauthorized" };
   }
 
-  // Parse geometry
-  const geomJson = JSON.parse(fieldRow.geom_geojson);
-  const centroidJson = JSON.parse(fieldRow.centroid_geojson);
-  
+  const geom = parseGeo(fieldRow.geom_geojson);
+  const centroid = parseGeo(fieldRow.centroid_geojson);
+  if (!geom || !centroid) return { error: "Field geometry is unavailable" };
+
   const field: Field = {
     id: fieldRow.id,
     spaceId: fieldRow.space_id,
     ownerId: fieldRow.owner_id,
     name: fieldRow.name,
-    geom: geomJson.coordinates[0].map(([lng, lat]: number[]) => [lat, lng] as [number, number]),
-    area: fieldRow.area_ha,
-    centroid: [centroidJson.coordinates[1], centroidJson.coordinates[0]],
-    place: fieldRow.place,
-    current_crop: fieldRow.current_crop,
-    thumb: fieldRow.thumb || "",
+    geom: geom.coordinates[0].map(([lng, lat]: number[]) => [lat, lng] as [number, number]),
+    area: Number(fieldRow.area_ha),
+    centroid: [centroid.coordinates[1], centroid.coordinates[0]],
+    place: fieldRow.place ?? { municipality: "", province: "" },
+    current_crop: fieldRow.current_crop ?? "",
+    thumb: fieldRow.thumb ?? "",
   };
 
-  // Build environmental profile (Blueprint 9.1)
   const profile = await profileFor(field);
   const week = await forecastFor(field);
-  const pid = profileId(profile);
+  profile.q.weather = week.length ? "ok" : "failed";
 
-  // Assemble request
   const request: HiRequest = {
-    mode: result.data.mode,
+    mode: parsed.data.mode,
     profile,
     week,
-    moisture: result.data.moisture,
-    current_crop: result.data.currentCrop,
+    moisture: parsed.data.moisture,
+    current_crop:
+      parsed.data.mode === "checkup"
+        ? parsed.data.currentCrop || fieldRow.current_crop || undefined
+        : undefined,
     observed_at: Date.now(),
-    weights: HEALTH_WEIGHTS,
+    weights: healthWeights,
   };
 
-  let response;
+  let response: ReturnType<typeof assess> | null = null;
   let status: "ok" | "degraded" | "abstained" | "failed";
-
   try {
-    // Call lib/hi (Blueprint 9.2 step 4)
     response = assess(request);
-    status = response.status === "failed" ? "failed" : response.status;
+    status = response.status;
   } catch (error) {
-    // Failed assessment
+    console.error("Assessment failed:", error);
     status = "failed";
-    response = null;
   }
 
-  // Extract denormalized fields for queries
-  const topCrop = response?.match?.[0] || response?.current;
-  const topCropId = topCrop?.crop || null;
-  const topClass = topCrop?.suitability_class || null;
-  const topScore = topCrop?.score || null;
-  const reliabilityTier = response?.reliability?.tier || null;
-  const modelId = response?.model?.id || null;
+  const top = response?.match?.[0] ?? response?.current;
+  const topCropId = top?.crop ?? null;
+  const topClass = top?.suitability_class ?? null;
+  const topScore = top ? top.match_pct ?? top.score ?? null : null;
 
-  // Store assessment (Blueprint 9.2 step 5)
   const { data: assessment, error: insertError } = await admin
     .from("assessments")
     .insert({
-      field_id: result.data.fieldId,
+      field_id: parsed.data.fieldId,
+      space_id: fieldRow.space_id,
       user_id: user.id,
-      profile_id: pid,
-      mode: result.data.mode,
+      profile_id: profileId(profile),
+      mode: parsed.data.mode,
       status,
-      idempotency_key: result.data.idempotencyKey,
-      request: request as any,
-      response: response as any,
-      model_id: modelId,
+      idempotency_key: parsed.data.idempotencyKey,
+      request,
+      response,
+      model_id: response?.model.id ?? null,
       top_crop_id: topCropId,
       top_class: topClass,
       top_score: topScore,
-      reliability_tier: reliabilityTier,
-      moisture: result.data.moisture,
-      current_crop: result.data.currentCrop || null,
-      photo_path: result.data.photoPath || null,
+      reliability_tier: response?.reliability.tier ?? null,
+      moisture: parsed.data.moisture,
+      current_crop: parsed.data.currentCrop || fieldRow.current_crop || null,
+      photo_path: parsed.data.photoPath || null,
+      rerun_of: parsed.data.rerunOf ?? null,
     })
-    .select()
+    .select("id")
     .single();
 
-  if (insertError) {
-    return { error: insertError.message };
-  }
+  if (insertError) return { error: insertError.message };
+  if (!response) return { error: "The model could not produce an assessment" };
 
   revalidatePath("/farmer/entries");
   revalidatePath("/farmer");
+  revalidatePath("/admin/entries");
   return { success: true, assessmentId: assessment.id, status };
 }
 
 export async function deleteAssessment(assessmentId: string) {
   const supabase = await supabaseServer();
-  const { data: { user } } = await supabase.auth.getUser();
+  const {
+    data: { user },
+  } = await supabase.auth.getUser();
+  if (!user) return { error: "Unauthorized" };
 
-  if (!user) {
-    return { error: "Unauthorized" };
-  }
-
-  // Check ownership
   const { data: assessment } = await supabase
     .from("assessments")
     .select("user_id")
     .eq("id", assessmentId)
     .single();
 
-  if (!assessment || assessment.user_id !== user.id) {
-    return { error: "Unauthorized" };
-  }
+  if (!assessment || assessment.user_id !== user.id) return { error: "Unauthorized" };
 
-  // Soft delete
   const { error } = await supabase
     .from("assessments")
     .update({ deleted_at: new Date().toISOString() })
     .eq("id", assessmentId);
+  if (error) return { error: error.message };
 
-  if (error) {
-    return { error: error.message };
-  }
+  revalidatePath("/farmer/entries");
+  revalidatePath("/farmer");
+  return { success: true };
+}
+
+export async function restoreAssessment(assessmentId: string) {
+  const supabase = await supabaseServer();
+  const {
+    data: { user },
+  } = await supabase.auth.getUser();
+  if (!user) return { error: "Unauthorized" };
+
+  const { error } = await supabase
+    .from("assessments")
+    .update({ deleted_at: null })
+    .eq("id", assessmentId)
+    .eq("user_id", user.id);
+  if (error) return { error: error.message };
 
   revalidatePath("/farmer/entries");
   return { success: true };
@@ -203,25 +206,18 @@ export async function deleteAssessment(assessmentId: string) {
 
 export async function rerunAssessment(originalId: string) {
   const supabase = await supabaseServer();
-  const { data: { user } } = await supabase.auth.getUser();
+  const {
+    data: { user },
+  } = await supabase.auth.getUser();
+  if (!user) return { error: "Unauthorized" };
 
-  if (!user) {
-    return { error: "Unauthorized" };
-  }
-
-  // Get original assessment
   const { data: original } = await supabase
     .from("assessments")
     .select("*")
     .eq("id", originalId)
     .single();
 
-  if (!original || original.user_id !== user.id) {
-    return { error: "Unauthorized" };
-  }
-
-  // Create new assessment with rerun_of link
-  const newIdempotencyKey = crypto.randomUUID();
+  if (!original || original.user_id !== user.id) return { error: "Unauthorized" };
 
   return runAssessment({
     fieldId: original.field_id,
@@ -229,41 +225,37 @@ export async function rerunAssessment(originalId: string) {
     moisture: original.moisture,
     currentCrop: original.current_crop || undefined,
     photoPath: original.photo_path || undefined,
-    idempotencyKey: newIdempotencyKey,
+    idempotencyKey: crypto.randomUUID(),
+    rerunOf: original.id,
   });
 }
 
-// Upload field photo
-export async function uploadFieldPhoto(file: File, userId: string): Promise<{ path?: string; error?: string }> {
-  const admin = supabaseAdmin();
+export async function uploadFieldPhoto(file: File): Promise<{ path?: string; error?: string }> {
+  const supabase = await supabaseServer();
+  const {
+    data: { user },
+  } = await supabase.auth.getUser();
+  if (!user) return { error: "Unauthorized" };
 
-  // Generate path: userId/timestamp_random.jpg
-  const timestamp = Date.now();
-  const random = Math.random().toString(36).substring(7);
-  const ext = file.name.split(".").pop() || "jpg";
-  const path = `${userId}/${timestamp}_${random}.${ext}`;
-
-  const { error } = await admin.storage
-    .from("field-photos")
-    .upload(path, file, {
-      contentType: file.type,
-      upsert: false,
-    });
-
-  if (error) {
-    return { error: error.message };
+  if (!(file instanceof File)) return { error: "Invalid photo" };
+  if (file.size > 5 * 1024 * 1024) return { error: "Photo must be 5 MB or smaller" };
+  if (!["image/jpeg", "image/png", "image/webp"].includes(file.type)) {
+    return { error: "Photo must be JPEG, PNG or WebP" };
   }
 
+  const ext = file.type === "image/png" ? "png" : file.type === "image/webp" ? "webp" : "jpg";
+  const path = `${user.id}/${crypto.randomUUID()}.${ext}`;
+
+  const { error } = await supabaseAdmin()
+    .storage.from("field-photos")
+    .upload(path, file, { contentType: file.type, upsert: false });
+
+  if (error) return { error: error.message };
   return { path };
 }
 
-// Get signed URL for photo
 export async function getPhotoUrl(path: string): Promise<string | null> {
   const supabase = await supabaseServer();
-
-  const { data } = await supabase.storage
-    .from("field-photos")
-    .createSignedUrl(path, 3600); // 1 hour
-
-  return data?.signedUrl || null;
+  const { data } = await supabase.storage.from("field-photos").createSignedUrl(path, 3600);
+  return data?.signedUrl ?? null;
 }

@@ -1,8 +1,8 @@
 "use client";
 
-/* Notifications (blueprint F-24). Kinds: weather_alert and announcement.
-   Each row stores a translation key and parameters in the product; this
-   build stores resolved copy in the fixture set. */
+/* Notifications (blueprint F-24). Weather alerts and announcements are the
+   kinds a farmer gets in volume, plus entry-ready, data and outcome prompts.
+   "All" lists every kind so the unread badge always matches the rows below it. */
 
 import { useState } from "react";
 import { useRouter } from "next/navigation";
@@ -32,9 +32,7 @@ export function Notifs() {
   const [f, setF] = useState<Filter>("all");
   const wide = bp !== "xs" && bp !== "sm";
 
-  const all = db.notifs.filter(
-    (n) => n.userId === user.id && ["weather", "announce"].includes(n.kind)
-  );
+  const all = db.notifs.filter((n) => n.userId === user.id);
   const list = all.filter((n) => f === "all" || n.kind === f);
 
   return (

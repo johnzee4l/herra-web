@@ -9,11 +9,13 @@ import {
   useContext,
   useEffect,
   useMemo,
+  useRef,
   useState,
   type ReactNode,
 } from "react";
-import { DEF_SETTINGS, type Settings, type Space, type User } from "@/lib/types";
+import { normalizeSettings, type Settings, type Space, type User } from "@/lib/types";
 import { uid } from "@/lib/utils";
+import { updateSettings } from "@/app/actions/settings";
 
 export type Bp = "xs" | "sm" | "md" | "lg" | "xl" | "2xl";
 
@@ -74,7 +76,7 @@ export function AppProvider({
   spaces: Space[];
   readonly?: boolean;
 }) {
-  const [settings, setSettingsState] = useState<Settings>(user.settings || DEF_SETTINGS);
+  const [settings, setSettingsState] = useState<Settings>(() => normalizeSettings(user.settings));
   const [spaceId, setSpaceId] = useState<string | null>(space?.id ?? null);
   const [bp, setBp] = useState<Bp>("xs");
   const [toasts, setToasts] = useState<ToastItem[]>([]);
@@ -90,8 +92,15 @@ export function AppProvider({
   }, []);
 
   const setSettings = useCallback((patch: Partial<Settings>) => {
-    setSettingsState((s) => ({ ...s, ...patch }));
-    // Settings are persisted via server action in the settings page
+    setSettingsState((s) => normalizeSettings({ ...s, ...patch }));
+    if (patch.theme) {
+      try {
+        localStorage.setItem("herra-theme", patch.theme);
+        document.cookie = `herra-theme=${patch.theme}; path=/; max-age=31536000; samesite=lax`;
+      } catch {
+        /* storage can be unavailable in private browsing */
+      }
+    }
   }, []);
 
   const dismissToast = useCallback((id: string) => {
@@ -118,6 +127,23 @@ export function AppProvider({
     },
     [dismissToast]
   );
+
+  /* Persist settings after the user changes them. The first render is the
+     value already loaded from the profile, so it must not be written back. */
+  const settingsMounted = useRef(false);
+  useEffect(() => {
+    if (!settingsMounted.current) {
+      settingsMounted.current = true;
+      return;
+    }
+    if (!user.id) return;
+    const tm = setTimeout(() => {
+      void updateSettings(settings).then((res) => {
+        if (res && "error" in res) console.error("Could not save settings:", res.error);
+      });
+    }, 450);
+    return () => clearTimeout(tm);
+  }, [settings, user.id]);
 
   const pushOverlay = useCallback(
     (kind: OverlayKind, o: Omit<OverlayItem, "id" | "kind" | "closing">) => {

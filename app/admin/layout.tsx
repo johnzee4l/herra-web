@@ -1,18 +1,28 @@
+import { redirect } from "next/navigation";
 import { AppProvider } from "@/lib/state";
 import { AdminChrome } from "@/components/shell/AdminChrome";
-import { SPACES, USERS } from "@/lib/fixtures";
+import { DataBridge } from "@/lib/data/hydrate";
+import { loadBootstrap } from "@/lib/data/bootstrap";
+import { supabaseServer } from "@/lib/supabase/client";
 
-export const dynamic = 'force-dynamic';
+export const dynamic = "force-dynamic";
 
-/* Admin console layout. The signed-in admin is the seeded admin account; in
-   the product this comes from the Supabase session and the role check happens
-   in middleware (blueprint 6.1). Spectate routes bypass the admin chrome and
-   supply their own AppRoot. */
-export default function AdminLayout({ children }: { children: React.ReactNode }) {
-  const admin = USERS.find((u) => u.role === "admin")!;
+export default async function AdminLayout({ children }: { children: React.ReactNode }) {
+  const sb = await supabaseServer();
+  const {
+    data: { user },
+  } = await sb.auth.getUser();
+  if (!user) redirect("/sign-in?redirect=/admin");
+
+  const data = await loadBootstrap(user.id, user.email ?? "");
+  if (!data) redirect("/sign-in?redirect=/admin");
+  if (data.user.role !== "admin") redirect("/farmer");
+
   return (
-    <AppProvider user={admin} space={SPACES[0]} spaces={SPACES}>
-      <AdminChrome>{children}</AdminChrome>
-    </AppProvider>
+    <DataBridge data={data}>
+      <AppProvider user={data.user} space={data.spaces[0] ?? null} spaces={data.spaces}>
+        <AdminChrome>{children}</AdminChrome>
+      </AppProvider>
+    </DataBridge>
   );
 }

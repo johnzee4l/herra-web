@@ -1,45 +1,20 @@
-/* Admin console data. The mockup kept models, datasets, sources, advisory
-   rules and the audit log inside its in-memory store; the product reads them
-   from Supabase (blueprint section 5: hi_models, hi_datasets, advisory_rules,
-   audit_log, app_settings). Shapes are kept identical so the screens are a
-   data-layer swap, not a UI change.
+/* Admin console data types and helpers.
 
-   Everything here is deterministic: the same seed always produces the same
-   confusion matrix, so a screenshot is reproducible. */
+   The rows themselves come from the ML registry (hi_models, hi_datasets,
+   hi_config) and the web tables (advisory_rules, audit_log) and are hydrated
+   by lib/data/bootstrap.ts. Nothing here invents a model, a metric or an
+   audit entry. The arrays are mutable only so DataBridge can fill them once
+   per request. */
 
 import { CROPS, CROP_IDS } from "@/lib/spec/crops";
+import type { Band, Crop } from "@/lib/types";
 import { sum } from "@/lib/utils";
+import { GRID_SAMPLE_GRID_HASH, GRID_SAMPLE_SCHEMA_HASH } from "@/lib/env/grid-samples";
 
 /* ---------- suitability classes ---------- */
 
 export const CLASS_KEYS = ["S1", "S2", "S3", "S4", "NS"] as const;
 export type ClassKey = (typeof CLASS_KEYS)[number];
-
-/** Class support in the test blocks. Fixed so metrics are stable. */
-const SUPPORT = [7200, 25800, 18600, 8400, 15600];
-
-/** Per-class recall. The matrix is generated from these, so the diagonal is
- *  exactly the recall and every metric below is reproducible. */
-type Recalls = [number, number, number, number, number];
-
-function confusion(recalls: Recalls): number[][] {
-  return recalls.map((r, i) => {
-    const row = [0, 0, 0, 0, 0];
-    row[i] = Math.round(SUPPORT[i] * r);
-    const rest = SUPPORT[i] - row[i];
-    const near = [i - 1, i + 1].filter((j) => j >= 0 && j < 5);
-    const far = [0, 1, 2, 3, 4].filter((j) => j !== i && !near.includes(j));
-    near.forEach((j) => {
-      row[j] = Math.round((rest * 0.6) / near.length);
-    });
-    far.forEach((j) => {
-      row[j] = Math.round((rest * 0.4) / far.length);
-    });
-    // Absorb rounding drift into the nearest neighbour.
-    row[near[0]] += SUPPORT[i] - sum(row);
-    return row;
-  });
-}
 
 export interface ClassMetric {
   k: ClassKey;
@@ -58,7 +33,12 @@ export interface CmMetrics {
   tot: number;
 }
 
-export function cmMetrics(cm: number[][]): CmMetrics {
+/** Metrics from a stored confusion matrix. Returns empty per-class rows when
+ *  the registry row has no matrix instead of fabricating one. */
+export function cmMetrics(cm: number[][] | null | undefined): CmMetrics {
+  if (!cm || cm.length === 0) {
+    return { acc: 0, bacc: 0, mf1: 0, wf1: 0, per: [], tot: 0 };
+  }
   const K = cm.length;
   const rows = cm.map((r) => sum(r));
   const cols = cm.map((_, j) => sum(cm.map((r) => r[j])));
@@ -71,10 +51,10 @@ export function cmMetrics(cm: number[][]): CmMetrics {
     return { k, p, r, f, s: rows[i] };
   });
   return {
-    acc: sum(diag) / tot,
+    acc: tot ? sum(diag) / tot : 0,
     bacc: sum(per.map((x) => x.r)) / K,
     mf1: sum(per.map((x) => x.f)) / K,
-    wf1: sum(per.map((x) => x.f * x.s)) / tot,
+    wf1: tot ? sum(per.map((x) => x.f * x.s)) / tot : 0,
     per,
     tot,
   };
@@ -88,69 +68,44 @@ export interface Model {
   id: string;
   name: string;
   status: ModelStatus;
-  cm: number[][];
+  /** Held-out confusion matrix from the registry, when the run stored one. */
+  cm: number[][] | null;
+  metrics: { acc: number; bacc: number; mf1: number; wf1: number };
   dataset: string;
   validation: "passed" | "failed";
   holdout: "complete" | "missing";
   parity: "pass" | "fail";
   feature_schema_hash: string;
+  grid_hash?: string;
+  holdout_acc?: number;
   fingerprint: string;
   params: string;
   prevChampion?: string;
   trained: number;
+  gate?: Record<string, boolean>;
+  gates?: Gate[];
+  gate_pass?: boolean;
+  parity_pass?: boolean;
+  rows?: number;
+  locations?: number;
 }
 
-const DAY = 864e5;
-const T0 = Date.parse("2026-11-02T02:00:00+08:00");
+export const MODELS: Model[] = [];
 
-export const MODELS: Model[] = [
-  {
-    id: "hi-xgb-20261103-4c9e1a7f",
-    name: "XGBoost 2026-11-03",
-    status: "candidate",
-    cm: confusion([0.86, 0.74, 0.71, 0.63, 0.88]),
-    dataset: "ds_ph_v7_20261028",
-    validation: "passed",
-    holdout: "complete",
-    parity: "pass",
-    feature_schema_hash: "sha256:9f2c41ab7d05",
-    fingerprint: "fp_4c9e1a7f",
-    params: "n_estimators=620 · max_depth=6 · learning_rate=0.045 · subsample=0.85 · colsample_bytree=0.8 · min_child_weight=3",
-    trained: T0,
-  },
-  {
-    id: "hi-xgb-20261012-1b7d3e02",
-    name: "XGBoost 2026-10-12",
-    status: "champion",
-    cm: confusion([0.83, 0.7, 0.67, 0.58, 0.85]),
-    dataset: "ds_ph_v6_20261005",
-    validation: "passed",
-    holdout: "complete",
-    parity: "pass",
-    feature_schema_hash: "sha256:9f2c41ab7d05",
-    fingerprint: "fp_1b7d3e02",
-    params: "n_estimators=540 · max_depth=6 · learning_rate=0.05 · subsample=0.85 · colsample_bytree=0.8 · min_child_weight=3",
-    trained: T0 - 22 * DAY,
-  },
-  {
-    id: "hi-xgb-20260920-7a2f5c11",
-    name: "XGBoost 2026-09-20",
-    status: "retired",
-    cm: confusion([0.79, 0.66, 0.62, 0.51, 0.81]),
-    dataset: "ds_ph_v5_20260910",
-    validation: "passed",
-    holdout: "complete",
-    parity: "pass",
-    feature_schema_hash: "sha256:1d80bb3f9a41",
-    fingerprint: "fp_7a2f5c11",
-    params: "n_estimators=480 · max_depth=5 · learning_rate=0.06 · subsample=0.8 · colsample_bytree=0.8 · min_child_weight=3",
-    trained: T0 - 44 * DAY,
-  },
-];
-
-export const CROP_PRIOR_CM = confusion([0.58, 0.44, 0.4, 0.3, 0.62]);
-
+/** True champion rows, in the order the registry returned them. */
 export const champion = () => MODELS.find((m) => m.status === "champion");
+
+export function metricsOf(m: Model): CmMetrics {
+  if (m.cm && m.cm.length) return cmMetrics(m.cm);
+  return {
+    acc: m.metrics.acc,
+    bacc: m.metrics.bacc,
+    mf1: m.metrics.mf1,
+    wf1: m.metrics.wf1,
+    per: [],
+    tot: 0,
+  };
+}
 
 /* ---------- promotion gates (blueprint 14) ---------- */
 
@@ -162,37 +117,26 @@ export interface Gate {
 }
 
 export function gatesOf(m: Model): Gate[] {
-  const prior = cmMetrics(CROP_PRIOR_CM);
-  const d = cmMetrics(m.cm);
-  const ch = MODELS.find((x) => x.status === "champion" && x.id !== m.id);
-  const chF1 = ch ? cmMetrics(ch.cm).mf1 : null;
-  const g3 = d.mf1 - prior.mf1 >= 0.05 && (chF1 == null || d.mf1 - chF1 >= 0);
+  if (m.gates?.length) return m.gates;
+  const validation = m.validation === "passed";
+  const holdout = m.holdout !== "missing";
   return [
-    {
-      id: "G1",
-      label: "Dataset and splits are valid",
-      value: m.validation === "passed" ? "passed" : "failed",
-      pass: m.validation === "passed",
-    },
+    { id: "G1", label: "Dataset and splits are valid", value: validation ? "passed" : "failed", pass: validation },
     {
       id: "G2",
       label: "Training, evaluation and holdout evaluation complete",
-      value: m.holdout === "missing" ? "missing" : "complete",
-      pass: m.holdout !== "missing",
+      value: holdout ? "complete" : "missing",
+      pass: holdout,
     },
     {
       id: "G3",
-      label: "Macro-F1 above crop prior by 0.05, and not below champion",
-      value:
-        "+" +
-        (d.mf1 - prior.mf1).toFixed(3) +
-        " vs prior" +
-        (chF1 == null ? "" : " · " + (d.mf1 - chF1 >= 0 ? "+" : "") + (d.mf1 - chF1).toFixed(3) + " vs champion"),
-      pass: g3,
+      label: "Macro-F1 above the crop prior by the required margin",
+      value: m.gate?.G3 ? "above prior" : "below prior",
+      pass: Boolean(m.gate?.G3),
     },
     {
       id: "G4",
-      label: "Artefacts load and 25 fixed feature payloads infer",
+      label: "Artefacts load and the golden vectors infer",
       value: m.parity === "pass" ? "match" : "mismatch",
       pass: m.parity === "pass",
     },
@@ -216,21 +160,10 @@ export const MET_ROWS: [keyof CmMetrics, string][] = [
 
 /** Metric as a percentage string, e.g. "78.4%". */
 export const fmtMetric = (m: Model, k: "acc" | "bacc" | "mf1" | "wf1") =>
-  (cmMetrics(m.cm)[k] * 100).toFixed(1) + "%";
+  ((m.metrics[k] ?? 0) * 100).toFixed(1) + "%";
 
-/* Feature importance, mean |contribution|. */
-export const FEATURES: [string, number, string, string][] = [
-  ["crop_id", 0.31, "Crop", "var(--vegetable)"],
-  ["clim_precip_annual", 0.27, "Annual rainfall", "var(--heat)"],
-  ["clim_temp_mean", 0.22, "Mean temperature", "var(--heat)"],
-  ["soil_ph", 0.19, "Soil pH", "var(--soil)"],
-  ["clim_dry_months", 0.15, "Dry months", "var(--heat)"],
-  ["soil_clay", 0.14, "Clay", "var(--soil)"],
-  ["terrain_elev", 0.12, "Elevation", "var(--sky)"],
-  ["terrain_slope", 0.1, "Slope", "var(--sky)"],
-  ["clim_precip_cv", 0.09, "Rainfall variability", "var(--heat)"],
-  ["soil_sand", 0.08, "Sand", "var(--soil)"],
-];
+/* Feature importance, from the training report when the run recorded it. */
+export const FEATURES: [string, number, string, string][] = [];
 
 /* ---------- datasets ---------- */
 
@@ -246,61 +179,15 @@ export interface Dataset {
   created: number;
 }
 
-export const DATASETS: Dataset[] = [
-  {
-    id: "ds_ph_v7_20261028",
-    name: "Philippines v7",
-    rows: 128400,
-    rejected: 0.031,
-    blocks: { train: 62, val: 14, test: 18 },
-    guard: 6,
-    sources: [
-      { name: "SoilGrids 2.0 (ISRIC)", version: "2.0", licence: "CC BY 4.0" },
-      { name: "ERA5-Land normals 1991–2020", version: "1991–2020", licence: "Copernicus licence" },
-      { name: "Copernicus DEM GLO-30", version: "GLO-30", licence: "Copernicus DEM licence" },
-    ],
-    hash: "sha256:5e1c9a0f3b27",
-    created: T0 - 5 * DAY,
-  },
-  {
-    id: "ds_ph_v6_20261005",
-    name: "Philippines v6",
-    rows: 121900,
-    rejected: 0.034,
-    blocks: { train: 60, val: 14, test: 18 },
-    guard: 6,
-    sources: [
-      { name: "SoilGrids 2.0 (ISRIC)", version: "2.0", licence: "CC BY 4.0" },
-      { name: "ERA5-Land normals 1991–2020", version: "1991–2020", licence: "Copernicus licence" },
-      { name: "Copernicus DEM GLO-30", version: "GLO-30", licence: "Copernicus DEM licence" },
-    ],
-    hash: "sha256:8a4410cc91de",
-    created: T0 - 28 * DAY,
-  },
-  {
-    id: "ds_ph_v5_20260910",
-    name: "Philippines v5",
-    rows: 114600,
-    rejected: 0.039,
-    blocks: { train: 58, val: 14, test: 18 },
-    guard: 6,
-    sources: [
-      { name: "SoilGrids 2.0 (ISRIC)", version: "2.0", licence: "CC BY 4.0" },
-      { name: "ERA5-Land normals 1991–2020", version: "1991–2020", licence: "Copernicus licence" },
-      { name: "Copernicus DEM GLO-30", version: "GLO-30", licence: "Copernicus DEM licence" },
-    ],
-    hash: "sha256:c02b7e1d4f38",
-    created: T0 - 53 * DAY,
-  },
-];
+export const DATASETS: Dataset[] = [];
 
 export const datasetById = (id: string) => DATASETS.find((d) => d.id === id);
 
 /* ---------- environment grid + providers ---------- */
 
 export const GRID = {
-  hash: "sha256:af1f84c773e56544550fa03a0dcf9368013a0268c34cdbc60355cb121de0596d",
-  schema: "sha256:23574559a5e5",
+  hash: GRID_SAMPLE_GRID_HASH,
+  schema: GRID_SAMPLE_SCHEMA_HASH,
   cells: "2,772,000",
   res: "0.0083° (~1 km)",
   coverage: "Philippines · 4–21.5°N, 116–127°E",
@@ -313,9 +200,12 @@ export const GRID = {
   ] as [string, string, string, string][],
 };
 
+/** The four checks the Data health screen runs against the live tier. */
 export const PROVIDERS: [string, string, string][] = [
+  ["supabase", "Supabase", "Postgres, Auth and Storage"],
   ["open_meteo", "Open-Meteo forecast", "Readiness and weather alerts"],
   ["photon", "Photon place names", "Reverse geocoding for field names"],
+  ["model", "Champion model", "Registry status and golden-vector parity"],
 ];
 
 /* ---------- advisory rules and health weights ---------- */
@@ -328,16 +218,7 @@ export interface Rule {
   active: boolean;
 }
 
-export const RULES: Rule[] = [
-  { id: "tip.soil_ph_low", kind: "explain.down:soil_ph", severity: "warn", desc: "Soil pH below the crop's preferred band", active: true },
-  { id: "tip.rain_low", kind: "explain.down:rain", severity: "warn", desc: "Annual rainfall below the crop's preferred band", active: true },
-  { id: "tip.heat_high", kind: "explain.down:tmean", severity: "risk", desc: "Mean temperature above the crop's heat limit", active: true },
-  { id: "tip.drain_poor", kind: "explain.down:drain", severity: "risk", desc: "Poor drainage on a low-lying field", active: true },
-  { id: "tip.slope_high", kind: "explain.down:slope", severity: "warn", desc: "Slope steep enough to need contour work", active: true },
-  { id: "tip.moisture_dry", kind: "checkup:moisture", severity: "info", desc: "Moisture reading is dry for the current crop", active: true },
-  { id: "tip.moisture_wet", kind: "checkup:moisture", severity: "warn", desc: "Moisture reading is waterlogged", active: false },
-  { id: "tip.season_fit", kind: "explain:months", severity: "info", desc: "Crop is outside its planting months", active: true },
-];
+export const RULES: Rule[] = [];
 
 export const WEIGHTS: Record<string, number> = {
   fit: 0.45,
@@ -372,18 +253,20 @@ export interface AuditRow {
   ts: number;
 }
 
-export const AUDIT_SEED: AuditRow[] = [
-  { id: "au_1", actor: "u_aileen", action: "promote_model", type: "model", target: "hi-xgb-20261012-1b7d3e02", meta: "Macro-F1 gain over prior", ts: T0 - 22 * DAY },
-  { id: "au_2", actor: "u_aileen", action: "create_space", type: "space", target: "sp_socorro", meta: "Socorro Upland Farmers", ts: T0 - 18 * DAY },
-  { id: "au_3", actor: "u_aileen", action: "rotate_code", type: "access_code", target: "sp_victoria", meta: "", ts: T0 - 12 * DAY },
-  { id: "au_4", actor: "u_aileen", action: "update_crop_thresholds", type: "crop", target: "rice", meta: "v7", ts: T0 - 10 * DAY },
-  { id: "au_5", actor: "u_aileen", action: "update_weights", type: "advisory_rule", target: "health_index", meta: "", ts: T0 - 9 * DAY },
-  { id: "au_6", actor: "u_aileen", action: "broadcast", type: "announcement", target: "an_1", meta: "sp_victoria", ts: T0 - 6 * DAY },
-  { id: "au_7", actor: "u_aileen", action: "review_outcome", type: "outcome", target: "o_1", meta: "", ts: T0 - 4 * DAY },
-  { id: "au_8", actor: "u_aileen", action: "spectate", type: "user", target: "u_rodel", meta: "", ts: T0 - 3 * DAY },
-  { id: "au_9", actor: "u_aileen", action: "revoke_code", type: "access_code", target: "sp_socorro", meta: "", ts: T0 - 2 * DAY },
-  { id: "au_10", actor: "u_aileen", action: "update_rule", type: "advisory_rule", target: "tip.moisture_wet", meta: "disabled", ts: T0 - 1 * DAY },
-];
+export interface AccessCode {
+  id: string;
+  spaceId: string;
+  hint: string;
+  expiresAt: number | null;
+  maxUses: number;
+  uses: number;
+  revokedAt: number | null;
+  created: number;
+}
+
+export const ACCESS_CODES: AccessCode[] = [];
+
+export const AUDIT_SEED: AuditRow[] = [];
 
 export const AUDIT_ICON: Record<string, string> = {
   create_space: "PenNib",
@@ -412,5 +295,92 @@ export const AUDIT_ICON: Record<string, string> = {
 
 export const CROP_FAMILIES = ["all", ...new Set(CROP_IDS.map((c) => CROPS[c].family))];
 
+/** A readable label for a stored advisory key: advisory.soil_ph_low →
+    "Soil pH low". Rows keep the key so copy can be translated later; the
+    console still needs a label while there is no en table for these keys. */
+export function ruleLabel(key: string): string {
+  const words = key.replace(/^advisory\./, "").replace(/_/g, " ").replace(/\bph\b/gi, "pH");
+  return words.charAt(0).toUpperCase() + words.slice(1);
+}
+
+/** Readiness thresholds the admin console may edit. The spec in
+    lib/spec/crops.ts seeds them; a saved change lives in hi_config.crop_overrides
+    and is hydrated per request. */
+export interface CropOverrides {
+  water?: Crop["water"];
+  heat?: number;
+  cold?: number;
+  wind?: number;
+  ideal?: number;
+  ph?: [number, number];
+  clay?: [number, number];
+}
+
+export const CROP_OVERRIDES: Record<string, CropOverrides> = {};
+
+/** Catalogue revision. Every saved threshold change increments it. */
+export const CATALOGUE = { version: 7 };
+
+/** The crop as it stands now: spec bands with the saved overrides on top. */
+export function cropConfig(id: string): Crop {
+  const c = CROPS[id];
+  const o = CROP_OVERRIDES[id] ?? {};
+  return {
+    ...c,
+    water: o.water ?? c.water,
+    heat: o.heat ?? c.heat,
+    wind: o.wind ?? c.wind,
+    ideal: o.ideal ?? c.ideal,
+    tol: { ph: o.ph ?? c.tol.ph, clay: o.clay ?? c.tol.clay },
+    b:
+      o.cold == null
+        ? c.b
+        : { ...c.b, tmean: [o.cold, c.b.tmean[1], c.b.tmean[2], c.b.tmean[3]] as Band },
+  };
+}
+
+/** Optimistic local echo of a saved edit, before the next bootstrap read. */
+export function mergeCropOverrides(id: string, patch: CropOverrides) {
+  CROP_OVERRIDES[id] = { ...CROP_OVERRIDES[id], ...patch };
+}
+
 /** Cold limit is not stored on the crop; the band's lower bound is the limit. */
-export const coldLimit = (id: string) => CROPS[id].b.tmean[0];
+export const coldLimit = (id: string) => cropConfig(id).b.tmean[0];
+
+/* ---------- hydration ---------- */
+
+export interface AdminHydration {
+  models: Model[];
+  datasets: Dataset[];
+  rules: Rule[];
+  audit: AuditRow[];
+  accessCodes?: Record<string, unknown>[];
+  crops?: Record<string, CropOverrides>;
+  catalogueVersion?: number;
+}
+
+export function hydrateAdmin(data: AdminHydration) {
+  MODELS.splice(0, MODELS.length, ...data.models);
+  DATASETS.splice(0, DATASETS.length, ...data.datasets);
+  RULES.splice(0, RULES.length, ...data.rules);
+  AUDIT_SEED.splice(0, AUDIT_SEED.length, ...data.audit);
+  for (const key of Object.keys(CROP_OVERRIDES)) delete CROP_OVERRIDES[key];
+  Object.assign(CROP_OVERRIDES, data.crops ?? {});
+  if (typeof data.catalogueVersion === "number" && data.catalogueVersion > 0) {
+    CATALOGUE.version = data.catalogueVersion;
+  }
+  ACCESS_CODES.splice(
+    0,
+    ACCESS_CODES.length,
+    ...(data.accessCodes ?? []).map((row) => ({
+      id: String(row.id),
+      spaceId: String(row.space_id),
+      hint: String(row.code_hint ?? ""),
+      expiresAt: row.expires_at ? Date.parse(String(row.expires_at)) || null : null,
+      maxUses: Number(row.max_uses ?? 0),
+      uses: Number(row.uses ?? 0),
+      revokedAt: row.revoked_at ? Date.parse(String(row.revoked_at)) || null : null,
+      created: Date.parse(String(row.created_at ?? "")) || 0,
+    }))
+  );
+}

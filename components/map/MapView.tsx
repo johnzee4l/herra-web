@@ -13,6 +13,7 @@ import "leaflet/dist/leaflet.css";
 import "@geoman-io/leaflet-geoman-free/dist/leaflet-geoman.css";
 import { Ic } from "@/components/ui/Ic";
 import { cx } from "@/lib/utils";
+import { useApp } from "@/lib/state";
 import {
   TILES,
   mapColors,
@@ -71,18 +72,34 @@ export default function MapView({
   bleed,
   cls = "",
 }: MapViewProps) {
+  const { settings } = useApp();
+  const resolvedTheme =
+    settings.theme === "system"
+      ? typeof window !== "undefined" && matchMedia("(prefers-color-scheme: dark)").matches
+        ? "dark"
+        : "light"
+      : settings.theme;
+  /* Auto-switch follows the interface theme; otherwise the saved default
+     style is the starting point. Every tile source is keyless. */
+  const preferredStyle: MapStyle = settings.autoMap ? resolvedTheme : settings.mapStyle;
+  const showLabels = settings.labels && !hideLabels;
   const el = useRef<HTMLDivElement | null>(null);
   const M = useRef<{
     map: LeafletMap | null;
     vec: import("leaflet").LayerGroup | null;
     draw: { layer: LPolygon | null; hist: Pt[][]; active: boolean };
     style: MapStyle;
-  }>({ map: null, vec: null, draw: { layer: null, hist: [], active: false }, style: "sat" });
+  }>({ map: null, vec: null, draw: { layer: null, hist: [], active: false }, style: preferredStyle });
 
-  const [style, setStyle] = useState<MapStyle>("sat");
+  const [style, setStyle] = useState<MapStyle>(preferredStyle);
   const [ready, setReady] = useState(false);
+  const tile = useRef<import("leaflet").TileLayer | null>(null);
   const P = useRef({ onMeasure, bound, boundName, drawKind, onFieldClick });
   P.current = { onMeasure, bound, boundName, drawKind, onFieldClick };
+
+  useEffect(() => {
+    setStyle(preferredStyle);
+  }, [preferredStyle]);
 
   /* mount */
   useEffect(() => {
@@ -109,6 +126,7 @@ export default function MapView({
       M.current.vec = L.layerGroup().addTo(map);
 
       L.control.scale({ imperial: false, position: "bottomright" }).addTo(map);
+      L.control.attribution({ position: "bottomleft", prefix: false }).addTo(map);
 
       const ro = new ResizeObserver(() => map.invalidateSize());
       ro.observe(el.current);
@@ -312,13 +330,12 @@ export default function MapView({
       const L = (await import("leaflet")).default;
       if (dead) return;
       M.current.style = style;
-      if ((map as unknown as { _tile?: unknown })._tile) {
-        map.eachLayer((l) => {
-          if (l instanceof L.TileLayer) map.removeLayer(l);
-        });
-      }
+      /* One base layer at a time. A style change swaps the source; without this
+         the previous tiles stayed on the map underneath the new ones. */
+      tile.current?.remove();
+      tile.current = null;
       const [url, attrib] = TILES[style];
-      L.tileLayer(url, {
+      tile.current = L.tileLayer(url, {
         maxZoom: 19,
         subdomains: "abcd",
         crossOrigin: false,
@@ -326,7 +343,6 @@ export default function MapView({
         keepBuffer: 1,
         attribution: attrib,
       }).addTo(map);
-      L.control.attribution({ position: "bottomleft", prefix: false }).addTo(map);
     })();
     return () => {
       dead = true;
@@ -355,7 +371,7 @@ export default function MapView({
           fillOpacity: style === "light" ? 0.08 : 0.06,
           interactive: false,
         }).addTo(g);
-        if (!hideLabels) {
+        if (showLabels) {
           pg.bindTooltip(sp.name, { permanent: true, direction: "center", className: "map-lbl" });
         }
       });
@@ -380,7 +396,7 @@ export default function MapView({
           fillOpacity: 0.18,
         }).addTo(g);
         pg.on("click", () => P.current.onFieldClick?.(f));
-        if (!hideLabels) {
+        if (showLabels) {
           pg.bindTooltip(f.name, { permanent: true, direction: "center", className: "map-lbl" });
         }
       });
@@ -388,7 +404,7 @@ export default function MapView({
     return () => {
       dead = true;
     };
-  }, [style, spaces, fields, selected, hideLabels, bound, ready]);
+  }, [style, spaces, fields, selected, showLabels, bound, ready]);
 
   /* fit */
   useEffect(() => {

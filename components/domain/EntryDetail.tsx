@@ -41,6 +41,7 @@ import {
   wxIcon,
 } from "@/lib/codes";
 import { CROPS } from "@/lib/spec/crops";
+import { rerunAssessment } from "@/app/actions/assessments";
 import { getSpace, topOf } from "@/lib/fixtures";
 import { liveEntry, liveField, removeEntries, restoreEntries } from "@/lib/store";
 import { useDb } from "@/lib/useDb";
@@ -58,6 +59,7 @@ export function EntryDetail({ id, admin = false }: { id: string; admin?: boolean
   const [mounted, setMounted] = useState(false);
   useEffect(() => setMounted(true), []);
   const [hero, setHero] = useState<"photo" | "map">("photo");
+  const [rerunning, setRerunning] = useState(false);
   const ph = bp !== "xs" && bp !== "sm";
   // Admins review entries read-only: no re-run, compare, outcome or delete.
   const ro = admin;
@@ -106,6 +108,28 @@ export function EntryDetail({ id, admin = false }: { id: string; admin?: boolean
   const hasPhoto = !!e.photo?.url;
   const hasFieldImage = !!F.thumb;
   const heroUrl = hero === "photo" && hasPhoto ? e.photo.url : F.thumb;
+
+  const rerun = async () => {
+    if (rerunning) return;
+    setRerunning(true);
+    try {
+      const res = await rerunAssessment(e.id);
+      if (!("assessmentId" in res) || !res.assessmentId) {
+        throw new Error(("error" in res && res.error) || "The model could not produce a new assessment");
+      }
+      const status = "status" in res && res.status ? res.status : "ok";
+      toast(`Re-run complete · ${status}`, { icon: "CheckCircle", tone: "growth" });
+      // Full reload rehydrates the entry store with the new assessment row.
+      window.location.assign(`/farmer/entries/${res.assessmentId}`);
+    } catch (error) {
+      toast(error instanceof Error ? error.message : "Re-run failed", {
+        icon: "XCircle",
+        tone: "risk",
+      });
+    } finally {
+      setRerunning(false);
+    }
+  };
 
   const del = () =>
     confirm({
@@ -315,10 +339,10 @@ export function EntryDetail({ id, admin = false }: { id: string; admin?: boolean
                   style={{ width: "100%", height: "100%", objectFit: "cover" }}
                 />
               </div>
-              <div className="caption mt2">© OpenStreetMap contributors</div>
+              <div className="caption mt2">Stored field boundary · {fA(F.area, settings)}</div>
             </BlurFade>
 
-            {!loading && r?.week && (
+            {!loading && r?.week?.length && (
               <BlurFade>
                 <SecHead label="Conditions at analysis" />
                 <MiniWeek week={r.week} settings={settings} />
@@ -347,8 +371,13 @@ export function EntryDetail({ id, admin = false }: { id: string; admin?: boolean
                 <div className="col g2">
                   <SecHead label="Actions" />
                   <div className="grid cols2 g2">
-                    <Btn cls="primary" icon="ArrowsClockwise" onClick={() => toast("Re-run queued", { icon: "ArrowsClockwise", tone: "sky" })}>
-                      {t("rerun")}
+                    <Btn
+                      cls="primary"
+                      icon="ArrowsClockwise"
+                      disabled={rerunning}
+                      onClick={rerun}
+                    >
+                      {rerunning ? "Re-running…" : t("rerun")}
                     </Btn>
                     <Btn
                       cls="secondary"

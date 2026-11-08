@@ -3,6 +3,7 @@
 /* Spaces: the joined-spaces list and one space's page (blueprint 7.1). */
 
 import dynamic from "next/dynamic";
+import { useState } from "react";
 import { useRouter } from "next/navigation";
 import { Ic } from "@/components/ui/Ic";
 import { CropIcon } from "@/components/ui/CropIcon";
@@ -23,9 +24,17 @@ import { Page } from "@/components/shell/Page";
 import { useApp } from "@/lib/state";
 import { t } from "@/lib/i18n/en";
 import { fnum } from "@/lib/utils";
+import { ago } from "@/lib/units/format";
 import { CROPS } from "@/lib/spec/crops";
-import { getSpace, membersOf } from "@/lib/fixtures";
-import { liveMyEntries, liveMyFields, liveMySpaces } from "@/lib/store";
+import { getSpace, getUser, membersOf } from "@/lib/fixtures";
+import {
+  joinSpace,
+  leaveSpace,
+  liveAnnouncements,
+  liveMyEntries,
+  liveMyFields,
+  liveMySpaces,
+} from "@/lib/store";
 import { useDb } from "@/lib/useDb";
 import { polyAreaHa } from "@/lib/geo/validate";
 
@@ -35,7 +44,7 @@ const MapView = dynamic(() => import("@/components/map/MapView"), {
 });
 
 export function SpacesList() {
-  const { bp, user, settings, openSheet, toast } = useApp();
+  const { bp, user, settings, openSheet } = useApp();
   const router = useRouter();
   useDb();
   const ms = liveMySpaces(user.id);
@@ -52,23 +61,7 @@ export function SpacesList() {
           onClick={() =>
             openSheet({
               title: "Join a space",
-              render: (close) => (
-                <div className="col g4">
-                  <div className="body-sm muted">
-                    Access codes are issued by your space admin. They look like{" "}
-                    <span className="mono">HRA-7K2Q-9M4D</span>.
-                  </div>
-                  <Btn
-                    block
-                    onClick={() => {
-                      close();
-                      toast("Ask your cooperative admin for a code", { icon: "Key", tone: "sky" });
-                    }}
-                  >
-                    Got it
-                  </Btn>
-                </div>
-              ),
+              render: (close) => <JoinSheet close={close} />,
             })
           }
         >
@@ -131,6 +124,62 @@ export function SpacesList() {
   );
 }
 
+function JoinSheet({ close }: { close: () => void }) {
+  const router = useRouter();
+  const { toast } = useApp();
+  const [code, setCode] = useState("");
+  const [busy, setBusy] = useState(false);
+  const [error, setError] = useState<string | null>(null);
+
+  const submit = async () => {
+    if (busy || !code.trim()) return;
+    setBusy(true);
+    setError(null);
+    try {
+      const spaceId = await joinSpace(code);
+      close();
+      toast("You joined the space", { icon: "Check" });
+      router.refresh();
+      if (spaceId) router.push(`/farmer/spaces/${spaceId}`);
+    } catch (err) {
+      setError(err instanceof Error ? err.message : "That code is not valid");
+    } finally {
+      setBusy(false);
+    }
+  };
+
+  return (
+    <div className="col g4">
+      <div className="body-sm muted">
+        Enter the code from your cooperative admin. It looks like <span className="mono">HRA-7K2Q-9M4D</span>.
+      </div>
+      <div>
+        <div className="label">Access code</div>
+        <input
+          className="input mono mt2"
+          value={code}
+          autoFocus
+          autoComplete="off"
+          spellCheck={false}
+          placeholder="HRA-XXXX-XXXX"
+          onChange={(event) => setCode(event.target.value.toUpperCase())}
+          onKeyDown={(event) => {
+            if (event.key === "Enter") void submit();
+          }}
+        />
+        {error && (
+          <div className="caption mt2" style={{ color: "var(--risk)" }}>
+            {error}
+          </div>
+        )}
+      </div>
+      <Btn block icon="Key" disabled={busy || !code.trim()} onClick={submit}>
+        {busy ? "Joining…" : "Join space"}
+      </Btn>
+    </div>
+  );
+}
+
 export function SpaceView({ id }: { id: string }) {
   const { bp, user, settings, toast } = useApp();
   const router = useRouter();
@@ -148,6 +197,7 @@ export function SpaceView({ id }: { id: string }) {
 
   const mem = membersOf(id);
   const mine = liveMyFields(user.id, id);
+  const anns = liveAnnouncements(id);
   const wide = bp !== "xs" && bp !== "sm";
 
   return (
@@ -183,7 +233,21 @@ export function SpaceView({ id }: { id: string }) {
 
           <BlurFade cls="sec">
             <SecHead label="Announcements" />
-            <div className="muted body-sm">No announcements in this build.</div>
+            {anns.length ? (
+              <div className="col g3">
+                {anns.map((a) => (
+                  <div key={a.id} className="card pad">
+                    <div className="title-sm">{a.title}</div>
+                    <div className="body-sm muted mt2">{a.body}</div>
+                    <div className="caption subtle mt2">
+                      {getUser(a.by)?.name ?? "Cooperative admin"} · {ago(a.created)}
+                    </div>
+                  </div>
+                ))}
+              </div>
+            ) : (
+              <div className="muted body-sm">No announcements yet.</div>
+            )}
           </BlurFade>
         </div>
 
@@ -228,8 +292,18 @@ export function SpaceView({ id }: { id: string }) {
                   body: "Your fields and entries stay, but you will lose access to this space until you join again.",
                   confirm: "Leave space",
                   onOk: () => {
-                    router.push("/farmer/spaces");
-                    toast(`You left ${sp.name}`, { icon: "SignOut", tone: "heat" });
+                    void leaveSpace(id)
+                      .then(() => {
+                        router.push("/farmer/spaces");
+                        router.refresh();
+                        toast(`You left ${sp.name}`, { icon: "SignOut", tone: "heat" });
+                      })
+                      .catch((error: unknown) =>
+                        toast(error instanceof Error ? error.message : "Could not leave this space", {
+                          icon: "Warning",
+                          tone: "risk",
+                        })
+                      );
                   },
                 })
               }

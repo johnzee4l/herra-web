@@ -24,11 +24,12 @@ import { EntryCard } from "@/components/domain/EntryCard";
 import { useApp } from "@/lib/state";
 import { avg, cx } from "@/lib/utils";
 import { t } from "@/lib/i18n/en";
-import { fLong, fTn } from "@/lib/units/format";
+import { ago, fLong, fTn } from "@/lib/units/format";
 import { RELI, WX, bandColor, bandTone, wxIcon } from "@/lib/codes";
 import { CROPS } from "@/lib/spec/crops";
 import { topOf, weekFor } from "@/lib/fixtures";
 import { liveLatestByField, liveMyEntries, liveMyFields } from "@/lib/store";
+import { useForecast } from "@/lib/useForecast";
 import { useDb } from "@/lib/useDb";
 import type { Entry, Field } from "@/lib/types";
 
@@ -65,12 +66,24 @@ export function Dashboard() {
     e.kind === "recommend" ? topOf(e)!.match_pct : e.result!.health!.index
   );
   const avgM = Math.round(avg(matches) || 0);
-  const hiShare = rows.length
-    ? rows.filter(({ e }) => e.result!.reliability.tier === "high").length / rows.length
-    : 0;
-  const tier = hiShare >= 0.5 ? "high" : hiShare >= 0.25 ? "medium" : "low";
+  /* The ring is a reliability index, not the share of High entries. A field
+     whose result is Medium is still usable and must not render as 0%. */
+  const relWeight = { high: 100, medium: 65, low: 25 } as const;
+  const relIndex = rows.length
+    ? Math.round(avg(rows.map(({ e }) => relWeight[e.result!.reliability.tier])))
+    : null;
+  const tier = relIndex == null ? "low" : relIndex >= 80 ? "high" : relIndex >= 50 ? "medium" : "low";
   const rs = ph ? (bp === "md" ? 104 : 124) : 76;
   const stroke = ph ? 9 : 7;
+
+  const wxF = fields[0];
+  const storedWeek = wxF ? weekFor(wxF.id) : [];
+  const wxCenter = wxF?.centroid ?? space?.center;
+  const { week, loading: wxLoading, error: wxError, updatedAt: wxAt } = useForecast(
+    wxCenter?.[0],
+    wxCenter?.[1],
+    storedWeek
+  );
 
   if (!space) {
     return (
@@ -84,9 +97,6 @@ export function Dashboard() {
       </Page>
     );
   }
-
-  const wxF = fields[0];
-  const week = wxF ? weekFor(wxF.id) : null;
 
   return (
     <Page title={t("home")} wide>
@@ -125,7 +135,6 @@ export function Dashboard() {
                   stroke={stroke}
                   suffix="%"
                   label={t("avgMatch")}
-                  delta={3}
                 />
                 <Ring
                   id={"d-f" + space.id}
@@ -148,14 +157,15 @@ export function Dashboard() {
                 />
                 <Ring
                   id={"d-r" + space.id}
-                  value={Math.round(hiShare * 100)}
+                  value={relIndex ?? 0}
                   size={rs}
                   stroke={stroke}
-                  color={"var(--" + RELI[tier as "high"].tone + ")"}
+                  color={relIndex == null ? "var(--subtle)" : "var(--" + RELI[tier].tone + ")"}
                   label={t("reliability")}
+                  sub={rows.length ? `${rows.length} analysed` : "No analyses"}
                   center={
                     <span
-                      className={"title-sm c-" + RELI[tier as "high"].tone}
+                      className={"title-sm " + (relIndex == null ? "muted" : "c-" + RELI[tier].tone)}
                       style={{
                         fontFamily: "var(--font-display)",
                         fontWeight: 700,
@@ -167,12 +177,12 @@ export function Dashboard() {
                           Math.round(
                             Math.min(
                               rs * 0.24,
-                              (rs - stroke * 2 - 10) / (RELI[tier as "high"].l.length * 0.62)
+                              (rs - stroke * 2 - 10) / (RELI[tier].l.length * 0.62)
                             )
                           ) + "px",
                       }}
                     >
-                      {RELI[tier as "high"].l}
+                      {relIndex == null ? "—" : RELI[tier].l}
                     </span>
                   }
                 />
@@ -310,12 +320,13 @@ export function Dashboard() {
             label={t("thisWeek")}
             right={
               <span className="caption row g1">
-                <Dot s="ok" live />
-                Open-Meteo · 2 h ago
+                <Dot s={wxError ? "warn" : "ok"} live={!wxError && !wxLoading} />
+                Open-Meteo ·{" "}
+                {wxLoading ? "updating" : wxError ? "stored forecast" : wxAt ? ago(wxAt) : "live"}
               </span>
             }
           />
-          {week ? (
+          {week.length ? (
             <div className={cx("week", !ph && "snap")} style={{ marginTop: 4 }}>
               {week.map((d, i) => (
                 <div key={d.ts} className={cx("wd", i === 0 && "today")}>
@@ -347,7 +358,18 @@ export function Dashboard() {
                 </div>
               ))}
             </div>
-          ) : null}
+          ) : (
+            <div className="alert info" style={{ marginTop: 8 }}>
+              <Ic n={wxLoading ? "CloudSun" : "CloudSlash"} w="fill" s={20} />
+              <div className="body-sm">
+                {wxLoading
+                  ? "Fetching the 7-day forecast…"
+                  : wxError
+                  ? `The 7-day forecast is unavailable: ${wxError}`
+                  : "No forecast is available for this location yet."}
+              </div>
+            </div>
+          )}
         </BlurFade>
 
         <BlurFade cls="sec">

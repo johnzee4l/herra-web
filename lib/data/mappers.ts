@@ -1,61 +1,58 @@
 /* Data mappers (Blueprint section 5)
-   Convert Supabase rows to domain types */
+   Convert Supabase rows to domain types. Rows may be partial: the mapper never
+   invents a value for a missing column. */
 
 import type {
   Announcement,
   Entry,
+  EntryResult,
+  EntryStatus,
   Field,
   Member,
   Notification,
   Space,
   User,
-  EntryResult,
-  RankedCrop,
-  HealthResult,
-  Reliability,
-  Advisory,
-  DataQuality,
 } from "@/lib/types";
+import { normalizeSettings } from "@/lib/types";
 
 export function toUser(row: any): User {
   return {
     id: row.id,
-    name: row.display_name,
-    email: row.email,
-    role: row.role,
-    settings: row.settings,
-    status: "active",
-    active: new Date(row.updated_at).getTime(),
-    joined: new Date(row.created_at).getTime(),
+    name: row.display_name ?? "",
+    email: row.email ?? "",
+    role: row.role ?? "farmer",
+    settings: normalizeSettings(row.settings),
+    status: row.status ?? "active",
+    active: row.updated_at ? Date.parse(row.updated_at) : undefined,
+    joined: row.created_at ? Date.parse(row.created_at) : undefined,
   };
 }
 
-export function toSpace(row: any): Space {
-  // Parse GeoJSON boundary
-  const boundaryGeoJson = typeof row.boundary_geojson === "string" 
-    ? JSON.parse(row.boundary_geojson) 
-    : row.boundary_geojson;
-  
-  const coords = boundaryGeoJson.coordinates[0].map(([lng, lat]: number[]) => 
-    [lat, lng] as [number, number]
-  );
+function ringFromGeoJson(value: unknown): [number, number][] {
+  if (!value) return [];
+  const geo = typeof value === "string" ? JSON.parse(value) : value;
+  const ring = geo?.coordinates?.[0];
+  if (!Array.isArray(ring)) return [];
+  return ring.map(([lng, lat]: number[]) => [lat, lng] as [number, number]);
+}
 
-  // Calculate center from boundary
-  const lats = coords.map((c: [number, number]) => c[0]);
-  const lngs = coords.map((c: [number, number]) => c[1]);
-  const center: [number, number] = [
-    lats.reduce((a: number, b: number) => a + b, 0) / lats.length,
-    lngs.reduce((a: number, b: number) => a + b, 0) / lngs.length,
-  ];
+export function toSpace(row: any): Space {
+  const boundary = ringFromGeoJson(row.boundary_geojson);
+  const center: [number, number] = boundary.length
+    ? [
+        boundary.reduce((a, p) => a + p[0], 0) / boundary.length,
+        boundary.reduce((a, p) => a + p[1], 0) / boundary.length,
+      ]
+    : [0, 0];
 
   return {
     id: row.id,
     name: row.name,
     desc: row.description || "",
     center,
-    boundary: coords,
+    boundary,
     place: row.place || { municipality: "", province: "" },
-    status: row.status,
+    status: row.status === "attention" ? "attention" : "ok",
     crop_focus: row.crop_focus || [],
   };
 }
@@ -64,44 +61,33 @@ export function toMember(row: any): Member {
   return {
     spaceId: row.space_id,
     userId: row.user_id,
-    joinedAt: new Date(row.joined_at).getTime(),
+    joinedAt: Date.parse(row.joined_at) || 0,
   };
 }
 
 export function toField(row: any): Field {
-  // Parse GeoJSON geometry
-  const geomGeoJson = typeof row.geom_geojson === "string"
-    ? JSON.parse(row.geom_geojson)
-    : row.geom_geojson;
-  
-  const coords = geomGeoJson.coordinates[0].map(([lng, lat]: number[]) =>
-    [lat, lng] as [number, number]
-  );
-
-  // Parse centroid if available
-  let centroid: [number, number];
-  if (row.centroid_geojson) {
-    const centroidGeoJson = typeof row.centroid_geojson === "string"
+  const geom = ringFromGeoJson(row.geom_geojson);
+  const centroidGeo = row.centroid_geojson
+    ? typeof row.centroid_geojson === "string"
       ? JSON.parse(row.centroid_geojson)
-      : row.centroid_geojson;
-    centroid = [centroidGeoJson.coordinates[1], centroidGeoJson.coordinates[0]];
-  } else {
-    // Calculate from coords
-    const lats = coords.map((c: [number, number]) => c[0]);
-    const lngs = coords.map((c: [number, number]) => c[1]);
-    centroid = [
-      lats.reduce((a: number, b: number) => a + b, 0) / lats.length,
-      lngs.reduce((a: number, b: number) => a + b, 0) / lngs.length,
-    ];
-  }
+      : row.centroid_geojson
+    : null;
+  const centroid: [number, number] = centroidGeo?.coordinates
+    ? [centroidGeo.coordinates[1], centroidGeo.coordinates[0]]
+    : geom.length
+    ? [
+        geom.reduce((a, p) => a + p[0], 0) / geom.length,
+        geom.reduce((a, p) => a + p[1], 0) / geom.length,
+      ]
+    : [0, 0];
 
   return {
     id: row.id,
     spaceId: row.space_id,
     ownerId: row.owner_id,
     name: row.name,
-    geom: coords,
-    area: parseFloat(row.area_ha),
+    geom,
+    area: Number(row.area_ha ?? 0),
     centroid,
     place: row.place || { municipality: "", province: "" },
     current_crop: row.current_crop || "",
@@ -129,37 +115,36 @@ function warningsFromResponse(res: any): string[] {
 }
 
 export function toEntry(row: any): Entry {
-  // Map response to EntryResult
   let result: EntryResult | undefined;
-  
+
   if (row.response) {
     const res = row.response;
-    
+    const components = res.reliability?.components ?? {};
     result = {
       status: row.status,
       reliability: {
-        tier: res.reliability.tier,
-        score: res.reliability.components.confidence,
+        tier: res.reliability?.tier ?? "low",
+        score: components.confidence ?? 0,
         comps: {
-          completeness: res.reliability.components.completeness,
-          input_quality: res.reliability.components.input_quality,
-          feature_support: res.reliability.components.feature_support,
-          confidence: res.reliability.components.confidence,
+          completeness: components.completeness ?? 0,
+          input_quality: components.input_quality ?? 0,
+          feature_support: components.feature_support ?? "atypical",
+          confidence: components.confidence ?? 0,
         },
       },
-      data_quality: res.data_quality.map((d: any) => ({
+      data_quality: (res.data_quality ?? []).map((d: any) => ({
         layer: d.layer,
         status: d.status,
         source: d.source,
         kind: d.kind,
         fetched_at: d.fetched_at,
         note: d.note,
-        flags: d.flags,
+        flags: d.flags ?? [],
       })),
-      flags: res.flags || [],
+      flags: res.flags ?? [],
       warnings: warningsFromResponse(res),
-      week: res.week,
-      advisories: res.advisories.map((a: any) => ({
+      week: res.week ?? [],
+      advisories: (res.advisories ?? []).map((a: any) => ({
         severity: a.severity,
         icon: a.icon,
         text: a.text,
@@ -181,11 +166,13 @@ export function toEntry(row: any): Entry {
             { key: "thermal", label: "Thermal", value: res.health.thermal },
             { key: "soil", label: "Soil", value: res.health.soil },
           ],
-          consider_instead: res.consider ? {
-            crop: res.consider.crop,
-            index: res.health.index + res.consider.gain,
-            reason: `Would score ${res.consider.gain} points higher`,
-          } : undefined,
+          consider_instead: res.consider
+            ? {
+                crop: res.consider.crop,
+                index: res.health.index + res.consider.gain,
+                reason: `Would score ${res.consider.gain} points higher`,
+              }
+            : undefined,
         };
       }
     }
@@ -197,32 +184,33 @@ export function toEntry(row: any): Entry {
     spaceId: row.space_id || "",
     authorId: row.user_id,
     kind: row.mode,
-    status: row.status === "failed" ? "failed" : "ready",
-    observed_at: new Date(row.created_at).getTime(),
+    status: row.status as EntryStatus,
+    observed_at: Date.parse(row.created_at) || 0,
     moisture: row.moisture,
-    currentCrop: row.current_crop,
+    currentCrop: row.current_crop ?? undefined,
     photo: row.photo_path ? { url: row.photo_path } : { url: "" },
     result,
-    rerun_of: row.rerun_of,
+    rerun_of: row.rerun_of ?? undefined,
   };
 }
 
-function toRankedCrop(c: any): RankedCrop {
+function toRankedCrop(c: any): import("@/lib/types").RankedCrop {
+  const explain = c.explanations ?? { up: [], down: [] };
   return {
     crop: c.crop,
     class: c.suitability_class,
     match_pct: c.match_pct,
-    up: c.explanations.up.map((r: any) => ({
+    up: (explain.up ?? []).map((r: any) => ({
       feature: r.var,
       label: r.text,
       value: r.impact,
     })),
-    down: c.explanations.down.map((r: any) => ({
+    down: (explain.down ?? []).map((r: any) => ({
       feature: r.var,
       label: r.text,
       value: r.impact,
     })),
-    warnings: c.blockers.map((b: any) => b.text),
+    warnings: (c.blockers ?? []).map((b: any) => b.text),
   };
 }
 
@@ -231,11 +219,11 @@ export function toNotification(row: any): Notification {
     id: row.id,
     userId: row.user_id,
     kind: row.kind,
-    title: row.title_key,
-    body: row.params?.body || "",
+    title: row.params?.title ?? row.title_key,
+    body: row.params?.body ?? "",
     route: row.route || "",
     read: !!row.read_at,
-    createdAt: new Date(row.created_at).getTime(),
+    createdAt: Date.parse(row.created_at) || 0,
   };
 }
 
@@ -245,7 +233,7 @@ export function toAnnouncement(row: any): Announcement {
     spaceId: row.space_id,
     title: row.title,
     body: row.body,
-    by: row.created_by,
-    created: new Date(row.created_at).getTime(),
+    by: row.created_by ?? "",
+    created: Date.parse(row.created_at) || 0,
   };
 }

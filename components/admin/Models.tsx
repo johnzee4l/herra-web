@@ -24,10 +24,8 @@ import { AdminPage } from "@/components/shell/AdminShell";
 import { useApp } from "@/lib/state";
 import { fnum } from "@/lib/utils";
 import { fDT, fDay } from "@/lib/units/format";
-import { MODEL_META } from "@/lib/hi/model-meta";
 import {
   CLASS_KEYS,
-  CROP_PRIOR_CM,
   DATASETS,
   FEATURES,
   GRID,
@@ -37,7 +35,7 @@ import {
   STAT_TONE,
   allGatesPass,
   champion,
-  cmMetrics,
+  metricsOf,
   datasetById,
   fmtMetric,
   gatesOf,
@@ -51,7 +49,7 @@ export function ModelLab() {
   return (
     <AdminPage
       title="Model Lab"
-      sub="Training-run history from the demo workspace. The live champion is XGBoost 2026-11-07; its metrics and hashes are in Data health."
+      sub="Training-run history from the ML registry. The serving model and its hashes are in Data health."
     >
       <Table
         cols={[
@@ -108,17 +106,11 @@ export function ModelDetail({ id }: { id: string }) {
   }
 
   const ch = champion();
-  const d = cmMetrics(m.cm);
-  const prior = cmMetrics(CROP_PRIOR_CM);
+  const d = metricsOf(m);
   const gates = m.status === "champion" ? null : gatesOf(m);
   const allPass = gates ? gates.every((g) => g.pass) : false;
   const ds = datasetById(m.dataset);
-  const hold = d.acc - 0.02;
-  const bands: [string, number, number][] = [
-    ["Typical", 0.71, d.acc + 0.01],
-    ["Unusual", 0.22, d.acc - 0.04],
-    ["Atypical", 0.07, d.acc - 0.12],
-  ];
+  const hold = m.holdout_acc ?? null;
 
   const promote = () =>
     openSheet({
@@ -233,7 +225,7 @@ export function ModelDetail({ id }: { id: string }) {
           size={104}
           suffix="%"
           label="Accuracy"
-          sub={"Champion " + (ch ? Math.round(cmMetrics(ch.cm).acc * 100) : 0) + "%"}
+          sub={ch ? "Champion " + Math.round(metricsOf(ch).acc * 100) + "%" : "No champion"}
         />
         <Ring
           id={"md2" + m.id}
@@ -242,16 +234,16 @@ export function ModelDetail({ id }: { id: string }) {
           color="var(--sky)"
           suffix="%"
           label="Macro-F1"
-          sub={"Crop prior " + Math.round(prior.mf1 * 100) + "%"}
+          sub={m.status === "champion" ? "Serving" : m.gate_pass ? "Gate passed" : "Gate failed"}
         />
         <Ring
           id={"md4" + m.id}
-          value={Math.round(hold * 100)}
+          value={hold == null ? 0 : Math.round(hold * 100)}
           size={104}
           color="var(--water)"
           suffix="%"
           label="Holdout region"
-          sub="unseen ADM2 (example)"
+          sub={hold == null ? "not reported" : "unseen region"}
         />
       </div>
 
@@ -267,7 +259,6 @@ export function ModelDetail({ id }: { id: string }) {
                 num: true,
                 r: (x: [string, string]) => (ch && ch.id !== m.id ? fmtMetric(ch, x[0] as never) : "—"),
               },
-              { h: "Crop prior", num: true, r: (x: [string, string]) => (prior[x[0] as "acc"] * 100).toFixed(1) + "%" },
             ]}
             rows={MET_ROWS as unknown as [string, string][]}
           />
@@ -312,47 +303,38 @@ export function ModelDetail({ id }: { id: string }) {
         </div>
       </div>
 
-      <div className="twocol mt8" style={{ gap: 40 }}>
-        <div>
-          <SecHead label="Holdout results" right={<span className="caption">unseen region (example)</span>} />
-          <Table
-            cols={[
-              { h: "Scope", r: (x: [string, number]) => x[0] },
-              { h: "Accuracy", num: true, r: (x: [string, number]) => (x[1] * 100).toFixed(1) + "%" },
-            ]}
-            rows={[
-              ["Test blocks (geographic split)", d.acc],
-              ["Holdout region", hold],
-            ] as [string, number][]}
-          />
-        </div>
-        <div>
-          <SecHead label="Support-band results" right={<span className="caption">holdout rows by typicality</span>} />
-          <Table
-            cols={[
-              { h: "Band", r: (x: [string, number, number]) => x[0] },
-              { h: "Share of rows", num: true, r: (x: [string, number, number]) => Math.round(x[1] * 100) + "%" },
-              { h: "Accuracy", num: true, r: (x: [string, number, number]) => (x[2] * 100).toFixed(1) + "%" },
-            ]}
-            rows={bands}
-          />
-        </div>
+      <div className="mt8">
+        <SecHead label="Holdout results" right={<span className="caption">unseen region</span>} />
+        <Table
+          cols={[
+            { h: "Scope", r: (x: [string, number]) => x[0] },
+            { h: "Accuracy", num: true, r: (x: [string, number]) => (x[1] * 100).toFixed(1) + "%" },
+          ]}
+          rows={[
+            ["Test blocks (geographic split)", d.acc],
+            ...(hold == null ? [] : [["Holdout region", hold] as [string, number]]),
+          ]}
+        />
       </div>
 
       <div className="twocol mt8" style={{ gap: 40 }}>
         <div>
           <SecHead label="Feature importance" right={<span className="caption">mean |contribution|</span>} />
-          <div className="bars">
-            {FEATURES.map(([k, v, l, c]) => (
-              <div key={k} className="brow">
-                <span className="bl" style={{ width: 170, fontSize: 13 }}>
-                  {l}
-                </span>
-                <Meter v={v} max={0.35} color={c} />
-                <span className="bv">{v.toFixed(2)}</span>
-              </div>
-            ))}
-          </div>
+          {FEATURES.length ? (
+            <div className="bars">
+              {FEATURES.map(([k, v, l, c]) => (
+                <div key={k} className="brow">
+                  <span className="bl" style={{ width: 170, fontSize: 13 }}>
+                    {l}
+                  </span>
+                  <Meter v={v} max={0.35} color={c} />
+                  <span className="bv">{v.toFixed(2)}</span>
+                </div>
+              ))}
+            </div>
+          ) : (
+            <div className="muted body-sm">No feature-importance data was published with this run.</div>
+          )}
         </div>
         <div>
           <SecHead label="Champion history" />
@@ -394,12 +376,16 @@ export function ModelDetail({ id }: { id: string }) {
           <div>
             <span className="label">Split (blocks)</span>
             <div className="mt1">
-              {ds ? `${ds.blocks.train} / ${ds.blocks.val} / ${ds.blocks.test}` : "—"}
+              {ds
+                ? ds.blocks.train + ds.blocks.val + ds.blocks.test === 0
+                  ? "not recorded"
+                  : `${ds.blocks.train} / ${ds.blocks.val} / ${ds.blocks.test}`
+                : "—"}
             </div>
           </div>
           <div>
             <span className="label">Guard blocks removed</span>
-            <div className="mt1">{ds ? ds.guard : "—"}</div>
+            <div className="mt1">{ds ? (ds.guard === 0 ? "not recorded" : ds.guard) : "—"}</div>
           </div>
           <div>
             <span className="label">Calibration</span>
@@ -479,7 +465,8 @@ function RollbackForm({
   );
 }
 
-function ConfusionTable({ cm }: { cm: number[][] }) {
+function ConfusionTable({ cm }: { cm: number[][] | null }) {
+  if (!cm) return <div className="muted body-sm">This run did not publish a confusion matrix.</div>;
   return (
     <div className="tscroll">
       <table className="table" style={{ fontSize: 12, tableLayout: "fixed", width: "100%" }}>
@@ -550,6 +537,9 @@ export function Datasets() {
             h: "Train / val / test",
             r: (d) => {
               const tot = d.blocks.train + d.blocks.val + d.blocks.test;
+              /* A dataset published without split counts has nothing to show; say so
+                 instead of rendering NaN. */
+              if (!tot) return "not recorded";
               return `${Math.round((d.blocks.train / tot) * 100)} / ${Math.round((d.blocks.val / tot) * 100)} / ${Math.round((d.blocks.test / tot) * 100)}%`;
             },
           },
@@ -578,12 +568,6 @@ export function Datasets() {
 function DatasetSheet({ id }: { id: string }) {
   const d = DATASETS.find((x) => x.id === id)!;
   const used = MODELS.filter((m) => m.dataset === id);
-  const rej = Math.round(d.rows * d.rejected);
-  const reasons: [string, number][] = [
-    ["Missing required value", Math.round(rej * 0.7)],
-    ["Coordinates outside the region", Math.round(rej * 0.2)],
-    ["Label not in canonical set", rej - Math.round(rej * 0.7) - Math.round(rej * 0.2)],
-  ];
   return (
     <div className="col g4">
       <div>
@@ -603,22 +587,11 @@ function DatasetSheet({ id }: { id: string }) {
         </div>
       </div>
       <div>
-        <div className="label">Rejection reasons</div>
-        <div className="col g1 mt2">
-          {reasons.map(([l, n]) => (
-            <div key={l} className="lstat">
-              <span className="grow">{l}</span>
-              <span className="st mono">{fnum(n)}</span>
-            </div>
-          ))}
-        </div>
-        <div className="caption mt1">Rejection does not stop training. Integrity failures do.</div>
-      </div>
-      <div>
         <div className="label">Geographic split</div>
         <div className="mt2 body-sm">
-          {d.blocks.train} training blocks · {d.blocks.val} validation · {d.blocks.test} test ·{" "}
-          {d.guard} guard blocks removed from training
+          {d.blocks.train + d.blocks.val + d.blocks.test === 0 && d.guard === 0
+            ? "No split counts recorded for this dataset."
+            : `${d.blocks.train} training blocks · ${d.blocks.val} validation · ${d.blocks.test} test · ${d.guard} guard blocks removed from training`}
         </div>
       </div>
       <div>
@@ -664,25 +637,38 @@ export function DataHealth() {
   const { toast } = useApp();
   const [busy, setBusy] = useState<Record<string, boolean>>({});
   const [checks, setChecks] = useState<Record<string, { ms: number; at: number }>>({});
-  const gridOk = MODEL_META.grid_hash === GRID.hash;
-  const schemaOk = MODEL_META.feature_schema_hash === GRID.schema;
+  const champ = champion();
+  const gridOk = champ?.grid_hash === GRID.hash;
+  const schemaOk = champ?.feature_schema_hash === GRID.schema;
 
-  const test = (k: string) => {
+  const test = async (k: string) => {
     setBusy((b) => ({ ...b, [k]: true }));
-    setTimeout(() => {
-      const ms = k === "open_meteo" ? 190 + Math.round(Math.random() * 90) : 330 + Math.round(Math.random() * 160);
-      setChecks((c) => ({ ...c, [k]: { ms, at: Date.now() } }));
-      setBusy((b) => ({ ...b, [k]: false }));
-      toast(`${k === "open_meteo" ? "Open-Meteo" : "Photon"} responded in ${ms} ms`, {
-        icon: "CheckCircle",
+    try {
+      const response = await fetch("/api/health/providers", {
+        method: "POST",
+        headers: { "content-type": "application/json" },
+        body: JSON.stringify({ provider: k }),
       });
-    }, 700);
+      const data = await response.json();
+      if (!response.ok || !data.ok) {
+        throw new Error(data.error || data.detail || `HTTP ${response.status}`);
+      }
+      setChecks((c) => ({ ...c, [k]: { ms: data.ms, at: Date.now() } }));
+      toast(`${data.label} responded in ${data.ms} ms`, { icon: "CheckCircle" });
+    } catch (error) {
+      toast(`${k}: ${error instanceof Error ? error.message : "probe failed"}`, {
+        icon: "XCircle",
+        tone: "risk",
+      });
+    } finally {
+      setBusy((b) => ({ ...b, [k]: false }));
+    }
   };
 
   return (
     <AdminPage
       title="Data health"
-      sub="Environment Grid manifest, champion status and two provider checks. The grid is built offline, so the app does not poll its source datasets."
+      sub="Environment Grid manifest, champion status and four live provider checks. The grid is built offline, so the app does not poll its source datasets."
     >
       <div className="twocol" style={{ gap: 40 }}>
         <div>
@@ -729,27 +715,27 @@ export function DataHealth() {
             <div className="rowitem" style={{ cursor: "default" }}>
               <Ic n="Medal" w="duotone" s={24} c="var(--primary)" />
               <div className="grow">
-                <div className="title-sm">XGBoost 2026-11-07</div>
-                <div className="caption mono">{MODEL_META.id}</div>
+                <div className="title-sm">{champ?.name ?? "No champion model"}</div>
+                <div className="caption mono">{champ?.id ?? "—"}</div>
               </div>
-              <Badge tone="growth">serving</Badge>
+              <Badge tone={champ ? "growth" : "risk"}>{champ ? "serving" : "missing"}</Badge>
             </div>
             <div className="grid cols2 g3" style={{ fontSize: 13.5 }}>
               <div>
                 <span className="label">Macro-F1</span>
-                <div className="mt1">{(MODEL_META.metrics.macro_f1 * 100).toFixed(1)}%</div>
+                <div className="mt1">{champ ? (champ.metrics.mf1 * 100).toFixed(1) + "%" : "—"}</div>
               </div>
               <div>
                 <span className="label">Balanced accuracy</span>
-                <div className="mt1">{(MODEL_META.metrics.balanced_accuracy * 100).toFixed(1)}%</div>
+                <div className="mt1">{champ ? (champ.metrics.bacc * 100).toFixed(1) + "%" : "—"}</div>
               </div>
               <div>
                 <span className="label">Training rows</span>
-                <div className="mt1">{fnum(MODEL_META.n_training_samples)}</div>
+                <div className="mt1">{champ?.rows ? fnum(champ.rows) : "—"}</div>
               </div>
               <div>
                 <span className="label">Locations</span>
-                <div className="mt1">{fnum(MODEL_META.n_locations)}</div>
+                <div className="mt1">{champ?.locations ? fnum(champ.locations) : "—"}</div>
               </div>
             </div>
             <div className="lstat">
@@ -762,7 +748,9 @@ export function DataHealth() {
               <span className="grow">Grid hash matches the champion&apos;s record</span>
               <span className="st caption">{gridOk ? "match" : "mismatch"}</span>
             </div>
-            <div className="caption">{MODEL_META.note}</div>
+            <div className="caption">
+              Holdout-evaluated against GAEZ reference labels. Not validated against field outcomes.
+            </div>
           </div>
         </div>
       </div>

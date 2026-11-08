@@ -11,12 +11,10 @@ import { CropIcon } from "@/components/ui/CropIcon";
 import { Badge, BlurFade, Btn, Field, Logo, Seg, haptic } from "@/components/ui/primitives";
 import { useApp } from "@/lib/state";
 import { t } from "@/lib/i18n/en";
-import { sleep } from "@/lib/utils";
 import { CROP_IDS } from "@/lib/spec/crops";
 import { CROPS } from "@/lib/spec/crops";
-import { getSpace } from "@/lib/fixtures";
-import { DEMO, saveSession, sessionFor } from "@/lib/session";
-import type { User } from "@/lib/types";
+import { resetPassword, signIn, signUp } from "@/app/actions/auth";
+import { joinSpace } from "@/app/actions/spaces";
 
 const validEmail = (v: string) => /^[^@\s]+@[^@\s]+\.[^@\s]+$/.test(v);
 
@@ -74,11 +72,6 @@ export function SignIn() {
   const [busy, setB] = useState(false);
   const [show, setShow] = useState(false);
 
-  const go = (u: User) => {
-    saveSession(sessionFor(u));
-    router.replace(u.role === "admin" ? "/admin" : "/farmer");
-  };
-
   const submit = async (e?: React.FormEvent) => {
     e?.preventDefault();
     const er: typeof err = {};
@@ -87,14 +80,16 @@ export function SignIn() {
     setErr(er);
     if (Object.keys(er).length) return;
     setB(true);
-    await sleep(500);
-    setB(false);
-    const u = [DEMO.farmer, DEMO.admin].find((x) => x.email === email.toLowerCase());
-    if (!u) {
-      setErr({ email: "No account with that email. Use a demo account below." });
-      return;
+    const fd = new FormData();
+    fd.set("email", email);
+    fd.set("password", pw);
+    const redirect = new URLSearchParams(window.location.search).get("redirect");
+    if (redirect) fd.set("redirect", redirect);
+    const res = await signIn(fd);
+    if (res?.error) {
+      setErr({ email: res.error });
+      setB(false);
     }
-    go(u);
   };
 
   return (
@@ -157,38 +152,6 @@ export function SignIn() {
         </Btn>
       </form>
 
-      <div className="row g3 mt6">
-        <div className="divider grow" />
-        <span className="caption">Demo accounts</span>
-        <div className="divider grow" />
-      </div>
-
-      <div className="grid cols2 g2 mt3">
-        <button
-          className="card hov"
-          style={{ padding: 14 }}
-          onClick={() => {
-            setE(DEMO.farmer.email);
-            setP("demo1234");
-          }}
-        >
-          <Ic n="Plant" w="duotone" s={26} c="var(--primary)" />
-          <div className="title-sm mt2">Farmer</div>
-          <div className="caption">Rodel · 2 spaces, 5 fields</div>
-        </button>
-        <button
-          className="card hov"
-          style={{ padding: 14 }}
-          onClick={() => {
-            setE(DEMO.admin.email);
-            setP("demo1234");
-          }}
-        >
-          <Ic n="Stack" w="duotone" s={26} c="var(--sky)" />
-          <div className="title-sm mt2">Admin</div>
-          <div className="caption">Aileen · all spaces</div>
-        </button>
-      </div>
     </AuthShell>
   );
 }
@@ -208,11 +171,15 @@ export function SignUp() {
     setErr(er);
     if (Object.keys(er).length) return;
     setB(true);
-    await sleep(600);
-    setB(false);
-    /* Sign-up always creates a farmer (blueprint 6.1). */
-    saveSession({ uid: "u_new", role: "farmer", email: f.email.toLowerCase(), name: f.name.trim() });
-    router.replace("/onboarding");
+    const fd = new FormData();
+    fd.set("email", f.email);
+    fd.set("password", f.pw);
+    fd.set("displayName", f.name);
+    const res = await signUp(fd);
+    if (res?.error) {
+      setErr({ email: res.error });
+      setB(false);
+    }
   };
 
   return (
@@ -267,6 +234,7 @@ export function Forgot() {
   const [e, setE] = useState("");
   const [sent, setSent] = useState(false);
   const [err, setErr] = useState("");
+  const [busy, setB] = useState(false);
 
   return (
     <AuthShell
@@ -303,15 +271,23 @@ export function Forgot() {
           <Btn
             sz="lg"
             block
-            onClick={() => {
+            disabled={busy}
+            onClick={async () => {
               if (!validEmail(e)) {
                 setErr("Enter a valid email address.");
                 return;
               }
-              setSent(true);
+              setErr("");
+              setB(true);
+              const fd = new FormData();
+              fd.set("email", e);
+              const res = await resetPassword(fd);
+              setB(false);
+              if (res?.error) setErr(res.error);
+              else setSent(true);
             }}
           >
-            Send reset link
+            {busy ? "Sending…" : "Send reset link"}
           </Btn>
         </div>
       )}
@@ -438,51 +414,10 @@ function CodeInput({
           {err}
         </div>
       )}
-      <div className="col g2" style={{ alignItems: "center" }}>
-        <span className="caption">Demo codes — tap to try</span>
-        <div className="tag-row" style={{ justifyContent: "center" }}>
-          {[
-            ["HRA-7K2Q-9M4D", "Valid"],
-            ["HRA-8D1B-MX6T", "Expired"],
-            ["HRA-5J7S-3KWY", "Revoked"],
-          ].map(([c, l]) => (
-            <button
-              key={c}
-              className="chip sm"
-              onClick={() => {
-                const r = c.replace(/^HRA-/, "").replace(/-/g, "").split("");
-                set(r);
-              }}
-            >
-              <span className="mono" style={{ fontSize: 11.5 }}>
-                {c}
-              </span>
-              <span className="muted">· {l}</span>
-            </button>
-          ))}
-        </div>
-      </div>
     </div>
   );
 }
 
-/* Demo codes. The real build hashes them with HMAC-SHA256 and a pepper, and
-   join_space() checks expiry, revocation and the use limit in one
-   transaction (blueprint 6.2). */
-const CODES: Record<string, { spaceId: string; state: "valid" | "expired" | "revoked" }> = {
-  "7K2Q9M4D": { spaceId: "sp_victoria", state: "valid" },
-  "8D1BMX6T": { spaceId: "sp_socorro", state: "expired" },
-  "5J7S3KWY": { spaceId: "sp_victoria", state: "revoked" },
-};
-
-function redeem(raw: string): { err?: string; spaceId?: string } {
-  const code = raw.replace(/^HRA-?/, "").replace(/-/g, "");
-  const c = CODES[code];
-  if (!c) return { err: "That code doesn't match any space. Check for 0 vs O and 1 vs I." };
-  if (c.state === "revoked") return { err: "This code was revoked by the space admin." };
-  if (c.state === "expired") return { err: "This code expired. Ask your admin for a new one." };
-  return { spaceId: c.spaceId };
-}
 
 export function JoinPage({ code }: { code?: string }) {
   const router = useRouter();
@@ -502,13 +437,13 @@ export function JoinPage({ code }: { code?: string }) {
       <CodeInput
         initial={(code || "").replace(/^HRA-?/i, "").replace(/-/g, "").toUpperCase()}
         onDone={async (c) => {
-          await sleep(300);
-          const r = redeem(c);
-          if (r.err) return r;
+          const fd = new FormData();
+          fd.set("code", c);
+          const r = await joinSpace(fd);
+          if (r.error) return { err: r.error };
           haptic("ok");
-          setDone(r.spaceId!);
-          const sp = getSpace(r.spaceId!);
-          toast(`Joined ${sp?.name}`, { icon: "Key" });
+          setDone(r.spaceId ?? "joined");
+          toast("Joined the space", { icon: "Key" });
           setTimeout(() => router.push("/farmer"), 700);
           return;
         }}
@@ -625,9 +560,10 @@ export function Onboarding() {
             </div>
             <CodeInput
               onDone={async (c) => {
-                await sleep(300);
-                const r = redeem(c);
-                if (r.err) return r;
+                const fd = new FormData();
+                fd.set("code", c);
+                const r = await joinSpace(fd);
+                if (r.error) return { err: r.error };
                 haptic("ok");
                 router.replace("/farmer");
                 return;

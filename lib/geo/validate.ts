@@ -165,16 +165,16 @@ export function validatePoly(
 /* Tile styles. Free, no key, attribution always visible (blueprint 3.1). */
 export const TILES = {
   light: [
-    "https://{s}.basemaps.cartocdn.com/light_all/{z}/{x}/{y}{r}.png",
-    "© OpenStreetMap contributors © CARTO",
+    "https://tile.openstreetmap.org/{z}/{x}/{y}.png",
+    "© OpenStreetMap contributors",
   ],
   dark: [
     "https://{s}.basemaps.cartocdn.com/dark_all/{z}/{x}/{y}{r}.png",
     "© OpenStreetMap contributors © CARTO",
   ],
   sat: [
-    "https://server.arcgisonline.com/ArcGIS/rest/services/World_Imagery/MapServer/tile/{z}/{y}/{x}",
-    "Esri, Maxar, Earthstar Geographics",
+    "https://tiles.maps.eox.at/wmts/1.0.0/s2cloudless-2020_3857/default/g/{z}/{y}/{x}.jpg",
+    "Sentinel-2 cloudless 2020 © EOX",
   ],
 } as const;
 

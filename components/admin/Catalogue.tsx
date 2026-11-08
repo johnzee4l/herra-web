@@ -24,14 +24,19 @@ import {
 import { AdminPage } from "@/components/shell/AdminShell";
 import { useApp } from "@/lib/state";
 import { fT } from "@/lib/units/format";
-import { CROPS, CROP_IDS } from "@/lib/spec/crops";
+import { updateAdvisoryRule, updateCropConfig, updateHealthWeights } from "@/app/actions/admin";
+import { CROP_IDS } from "@/lib/spec/crops";
 import {
+  CATALOGUE,
   CROP_FAMILIES,
   RULES,
   WEIGHTS,
   WEIGHT_COLOR,
   WEIGHT_LABEL,
   coldLimit,
+  cropConfig,
+  mergeCropOverrides,
+  ruleLabel,
 } from "@/lib/admin";
 
 export const cap = (s: string) => s.charAt(0).toUpperCase() + s.slice(1);
@@ -41,9 +46,9 @@ export const cap = (s: string) => s.charAt(0).toUpperCase() + s.slice(1);
 export function CropCatalog() {
   const { openSheet, settings } = useApp();
   const [fam, setFam] = useState("all");
-  const [version, setVersion] = useState(7);
+  const [version, setVersion] = useState(() => CATALOGUE.version);
 
-  const rows = CROP_IDS.filter((c) => fam === "all" || CROPS[c].family === fam);
+  const rows = CROP_IDS.filter((c) => fam === "all" || cropConfig(c).family === fam);
 
   return (
     <AdminPage
@@ -65,22 +70,22 @@ export function CropCatalog() {
               <div className="row g3">
                 <CropIcon id={id} s={38} />
                 <div>
-                  <b>{CROPS[id].name}</b>
-                  <div className="caption">{CROPS[id].family}</div>
+                  <b>{cropConfig(id).name}</b>
+                  <div className="caption">{cropConfig(id).family}</div>
                 </div>
               </div>
             ),
           },
           {
             h: "Water need",
-            r: (id: string) => <Badge tone="water">{cap(CROPS[id].water)}</Badge>,
+            r: (id: string) => <Badge tone="water">{cap(cropConfig(id).water)}</Badge>,
           },
-          { h: "Heat limit", num: true, r: (id: string) => fT(CROPS[id].heat, settings) },
+          { h: "Heat limit", num: true, r: (id: string) => fT(cropConfig(id).heat, settings) },
           { h: "Cold limit", num: true, r: (id: string) => fT(coldLimit(id), settings) },
-          { h: "Wind sensitive", r: (id: string) => (CROPS[id].wind ? "Yes" : "No") },
-          { h: "Soil pH", r: (id: string) => CROPS[id].tol.ph.join("–") },
-          { h: "Clay", r: (id: string) => CROPS[id].tol.clay.join("–") + "%" },
-          { h: "Ideal moisture", num: true, r: (id: string) => CROPS[id].ideal.toFixed(1) },
+          { h: "Wind sensitive", r: (id: string) => (cropConfig(id).wind ? "Yes" : "No") },
+          { h: "Soil pH", r: (id: string) => cropConfig(id).tol.ph.join("–") },
+          { h: "Clay", r: (id: string) => cropConfig(id).tol.clay.join("–") + "%" },
+          { h: "Ideal moisture", num: true, r: (id: string) => cropConfig(id).ideal.toFixed(1) },
         ]}
         rows={rows}
         onRow={(id) =>
@@ -108,7 +113,8 @@ function CropEditor({
   onSaved: (v: number) => void;
 }) {
   const { toast } = useApp();
-  const c = CROPS[id];
+  const c = cropConfig(id);
+  const [busy, setBusy] = useState(false);
   const [d, setD] = useState({
     water: c.water,
     heat: c.heat,
@@ -135,7 +141,7 @@ function CropEditor({
       <div className="alert info">
         <Ic n="Info" w="fill" s={20} />
         <div className="body-sm">
-          <b>This changes readiness and health only. Reference labels are not affected.</b>
+          <b>Saves this crop's readiness and health thresholds. Reference labels are not affected.</b>
           Saving creates a new catalogue version.
         </div>
       </div>
@@ -196,16 +202,39 @@ function CropEditor({
 
       <Btn
         sz="lg"
-        disabled={bad}
+        disabled={bad || busy}
         icon="Check"
-        onClick={() => {
-          const next = 8;
-          onSaved(next);
-          close();
-          toast(`${c.name} saved as catalogue v${next}`, { icon: "Check" });
+        onClick={async () => {
+          if (busy) return;
+          setBusy(true);
+          const patch = {
+            water: d.water,
+            heat: d.heat,
+            cold: d.cold,
+            wind: d.wind ? 1 : 0,
+            ideal: d.ideal,
+            ph: d.ph,
+            clay: d.clay,
+          };
+          try {
+            const result = await updateCropConfig(id, patch);
+            if ("error" in result) throw new Error(result.error);
+            mergeCropOverrides(id, patch);
+            CATALOGUE.version = result.version;
+            onSaved(result.version);
+            close();
+            toast(`${c.name} saved as catalogue v${result.version}`, { icon: "Check" });
+          } catch (error) {
+            toast(error instanceof Error ? error.message : "Could not save this crop", {
+              icon: "Warning",
+              tone: "risk",
+            });
+          } finally {
+            setBusy(false);
+          }
         }}
       >
-        Save as new version
+        {busy ? "Saving..." : "Save as new version"}
       </Btn>
     </div>
   );
@@ -217,6 +246,7 @@ export function Advisory() {
   const { toast } = useApp();
   const [rules, setRules] = useState(RULES);
   const [w, setW] = useState({ ...WEIGHTS });
+  const [busy, setBusy] = useState(false);
 
   const tot = +Object.values(w).reduce((a, b) => a + b, 0).toFixed(2);
   const okW = Math.abs(tot - 1) < 0.005;
@@ -254,17 +284,26 @@ export function Advisory() {
                 }}
               />
               <div className="grow">
-                <div style={{ fontWeight: 650, fontSize: 14 }}>{r.desc}</div>
-                <div className="caption mono">
-                  {r.id} · {r.kind}
-                </div>
+                <div style={{ fontWeight: 650, fontSize: 14 }}>{ruleLabel(r.desc)}</div>
+                <div className="caption mono">{r.id}</div>
               </div>
               <Switch
                 on={r.active}
                 label={r.id}
-                onChange={(v) =>
-                  setRules((list) => list.map((x) => (x.id === r.id ? { ...x, active: v } : x)))
-                }
+                onChange={(v) => {
+                  setRules((list) => list.map((x) => (x.id === r.id ? { ...x, active: v } : x)));
+                  void updateAdvisoryRule(r.id, { active: v })
+                    .then((result) => {
+                      if (result.error) throw new Error(result.error);
+                    })
+                    .catch((error: unknown) => {
+                      setRules((list) => list.map((x) => (x.id === r.id ? { ...x, active: !v } : x)));
+                      toast(error instanceof Error ? error.message : "Could not update this rule", {
+                        icon: "Warning",
+                        tone: "risk",
+                      });
+                    });
+                }}
               />
             </div>
           ))}
@@ -308,11 +347,31 @@ export function Advisory() {
             </div>
 
             <Btn
-              disabled={!okW}
+              disabled={!okW || busy}
               icon="Check"
-              onClick={() => toast("Weights saved", { icon: "Check" })}
+              onClick={async () => {
+                if (busy) return;
+                setBusy(true);
+                try {
+                  const result = await updateHealthWeights({
+                    fit: w.fit,
+                    water: w.water,
+                    thermal: w.thermal,
+                    soil: w.soil,
+                  });
+                  if (result.error) throw new Error(result.error);
+                  toast("Weights saved", { icon: "Check" });
+                } catch (error) {
+                  toast(error instanceof Error ? error.message : "Could not save weights", {
+                    icon: "Warning",
+                    tone: "risk",
+                  });
+                } finally {
+                  setBusy(false);
+                }
+              }}
             >
-              Save weights
+              {busy ? "Saving…" : "Save weights"}
             </Btn>
           </div>
         </div>

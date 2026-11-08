@@ -1,220 +1,331 @@
-/* Reactive store layer - bridges frontend to Supabase backend
-   This provides the functions the frontend expects while using server actions underneath */
+/* Client store, hydrated from real Supabase rows by DataBridge.
+
+   This is a read cache plus optimistic mutation layer. Every mutation calls a
+   server action; the action is the only thing that writes to the database.
+   There is no localStorage copy and no fixture seed. */
 
 "use client";
 
-import type { Entry, Field, Space, Notification, Announcement } from "@/lib/types";
+import type {
+  Announcement,
+  Entry,
+  Field,
+  Member,
+  Notification,
+  Space,
+  User,
+  WeekDay,
+} from "@/lib/types";
+import {
+  archiveField as archiveFieldAction,
+  createField as createFieldAction,
+  updateField as updateFieldAction,
+  unarchiveField as unarchiveFieldAction,
+} from "@/app/actions/fields";
+import {
+  deleteAssessment,
+  restoreAssessment,
+} from "@/app/actions/assessments";
+import { submitOutcome } from "@/app/actions/outcomes";
+import {
+  markAllNotificationsRead,
+  markNotificationRead,
+} from "@/app/actions/notifications";
+import {
+  joinSpace as joinSpaceAction,
+  leaveSpace as leaveSpaceAction,
+  updateMemberRole,
+  updateSpace as updateSpaceAction,
+} from "@/app/actions/spaces";
+import { AUDIT_SEED, type AuditRow } from "@/lib/admin";
 
-import type { Member, User } from "@/lib/types";
-import { FIELDS, ENTRIES, SPACES, MEMBERS, USERS } from "@/lib/fixtures";
-import { CROP_IDS } from "@/lib/spec/crops";
+export interface OutcomeRow {
+  id: string;
+  fieldId: string | null;
+  entryId: string | null;
+  userId: string | null;
+  crop: string;
+  result: string;
+  seasonEnd: string | null;
+  note: string | null;
+  reviewStatus: string;
+  createdAt: number;
+}
 
-/* Mock database instance for compatibility */
 export const db = {
-  entries: [...ENTRIES] as Entry[],
-  fields: [...FIELDS] as Field[],
-  spaces: [...SPACES] as Space[],
+  entries: [] as Entry[],
+  fields: [] as Field[],
+  spaces: [] as Space[],
   notifications: [] as Notification[],
-  notifs: [] as Notification[], // Alias for notifications
+  notifs: [] as Notification[],
   announcements: [] as Announcement[],
-  members: [...MEMBERS] as Member[],
-  users: [...USERS] as User[],
-  outcomes: [] as any[],
+  members: [] as Member[],
+  users: [] as User[],
+  outcomes: [] as OutcomeRow[],
 };
 
-/* Persist user-created rows in localStorage until the Supabase tables are
-   connected. Fixture rows stay in the bundle and are never re-written, which
-   keeps us clear of the storage quota.
-
-   v2 drops entries produced by the 16-crop stub. Fields are migrated in
-   place: a crop outside the champion roster becomes empty, not a crash. */
-const LS_ENTRIES = "herra.mock.entries.v2";
-const LS_FIELDS = "herra.mock.fields.v1";
-const seedEntryIds = new Set(ENTRIES.map((e) => e.id));
-const seedFieldIds = new Set(FIELDS.map((f) => f.id));
-
-function validCrop(value: string | undefined): string {
-  if (value === "corn") return "maize";
-  return value && CROP_IDS.includes(value) ? value : "";
+function replace<T>(target: T[], next: T[]) {
+  target.splice(0, target.length, ...next);
 }
 
-function readSaved<T>(key: string): T[] {
-  if (typeof window === "undefined") return [];
-  try {
-    const raw = window.localStorage.getItem(key);
-    return raw ? (JSON.parse(raw) as T[]) : [];
-  } catch {
-    return [];
-  }
+export function hydrateStore(data: {
+  user: User;
+  spaces: Space[];
+  fields: Field[];
+  entries: Entry[];
+  members: Member[];
+  users: User[];
+  notifications: Notification[];
+  announcements: Announcement[];
+  outcomes: OutcomeRow[];
+}) {
+  replace(db.spaces, data.spaces);
+  replace(db.fields, data.fields);
+  replace(db.entries, data.entries);
+  replace(db.members, data.members);
+  replace(db.users, data.users);
+  replace(db.notifications, data.notifications);
+  db.notifs = db.notifications;
+  replace(db.announcements, data.announcements);
+  replace(db.outcomes, data.outcomes);
+  if (!db.users.some((u) => u.id === data.user.id)) db.users.unshift(data.user);
 }
-
-function writeSaved(key: string, rows: unknown[]) {
-  if (typeof window === "undefined") return;
-  try {
-    window.localStorage.setItem(key, JSON.stringify(rows));
-  } catch {
-    /* Storage full or blocked - keep working in memory. */
-  }
-}
-
-function persistEntries() {
-  writeSaved(LS_ENTRIES, db.entries.filter((e) => !seedEntryIds.has(e.id)));
-}
-
-function persistFields() {
-  writeSaved(LS_FIELDS, db.fields.filter((f) => !seedFieldIds.has(f.id)));
-}
-
-/* Hydrate saved rows once on the client. Entries whose ranking contains a
-   crop outside the champion roster are dropped; fields are migrated. */
-if (typeof window !== "undefined") {
-  for (const e of readSaved<Entry>(LS_ENTRIES)) {
-    const crops = [
-      ...(e.result?.match ?? []),
-      ...(e.result?.current ? [e.result.current] : []),
-    ].map((c) => c.crop);
-    if (crops.some((c) => !CROP_IDS.includes(c))) continue;
-    if (!db.entries.some((x) => x.id === e.id)) db.entries.push(e);
-  }
-  for (const f of readSaved<Field>(LS_FIELDS)) {
-    f.current_crop = validCrop(f.current_crop);
-    if (!db.fields.some((x) => x.id === f.id)) db.fields.push(f);
-  }
-}
-
-/* Live query functions - these will be replaced with real-time subscriptions */
 
 export function liveMyFields(userId: string, spaceId?: string): Field[] {
-  return db.fields.filter(f => f.ownerId === userId && (!spaceId || f.spaceId === spaceId));
+  return db.fields.filter(
+    (f) => f.ownerId === userId && !f.archived && (!spaceId || f.spaceId === spaceId)
+  );
 }
 
 export function liveMySpaces(userId: string): Space[] {
-  return db.spaces;
+  const user = db.users.find((u) => u.id === userId);
+  if (user?.role === "admin") return db.spaces;
+  return db.spaces.filter((s) => db.members.some((m) => m.spaceId === s.id && m.userId === userId));
 }
 
 export function liveMyEntries(userId: string, spaceId?: string): Entry[] {
-  return db.entries.filter(e => e.authorId === userId && (!spaceId || e.spaceId === spaceId));
+  return db.entries.filter(
+    (e) => e.authorId === userId && (!spaceId || e.spaceId === spaceId)
+  );
 }
 
 export function liveEntry(entryId: string): Entry | null {
-  return db.entries.find(e => e.id === entryId) || null;
+  return db.entries.find((e) => e.id === entryId) || null;
 }
 
 export function liveField(fieldId: string): Field | null {
-  return db.fields.find(f => f.id === fieldId) || null;
+  return db.fields.find((f) => f.id === fieldId) || null;
 }
 
 export function liveEntriesOfField(fieldId: string): Entry[] {
-  return db.entries.filter(e => e.fieldId === fieldId);
+  return db.entries
+    .filter((e) => e.fieldId === fieldId)
+    .sort((a, b) => b.observed_at - a.observed_at);
 }
 
-export function liveOutcomesOfField(fieldId: string): any[] {
-  return [];
+export function liveOutcomesOfField(fieldId: string): OutcomeRow[] {
+  return db.outcomes.filter((o) => o.fieldId === fieldId);
 }
 
 export function liveLatestByField(fieldId: string): Entry | null {
   const entries = db.entries
-    .filter(e => e.fieldId === fieldId && e.status === "ready")
+    .filter(
+      (e) =>
+        e.fieldId === fieldId &&
+        !!e.result &&
+        e.status !== "abstained" &&
+        e.status !== "failed"
+    )
     .sort((a, b) => b.observed_at - a.observed_at);
   return entries[0] || null;
 }
 
 export function liveAnnouncements(spaceId: string): Announcement[] {
-  return db.announcements.filter(a => a.spaceId === spaceId);
+  return db.announcements
+    .filter((a) => a.spaceId === spaceId)
+    .sort((a, b) => b.created - a.created);
 }
 
-export function liveAudit(): any[] {
-  return [];
+export function liveWeek(fieldId: string): WeekDay[] {
+  return liveLatestByField(fieldId)?.result?.week ?? [];
 }
 
-/* Mutation functions - these call server actions */
-
-export async function addEntry(entry: Partial<Entry>): Promise<Entry> {
-  const newEntry = {
-    ...entry,
-    id: entry.id || crypto.randomUUID(),
-  } as Entry;
-  const existing = db.entries.findIndex((e) => e.id === newEntry.id);
-  if (existing >= 0) db.entries[existing] = newEntry;
-  else db.entries.push(newEntry);
-  persistEntries();
-  return newEntry;
+export function liveAudit(): AuditRow[] {
+  return AUDIT_SEED;
 }
 
-export function addOutcome(outcome: any): void {
-  // Call server action
-}
+/* ---------- mutations ---------- */
 
-export function addAnnouncement(announcement: Partial<Announcement>): Announcement {
-  const newAnnouncement = {
-    ...announcement,
-    id: announcement.id || crypto.randomUUID(),
-    created: announcement.created || Date.now(),
-  } as Announcement;
-  db.announcements.push(newAnnouncement);
-  return newAnnouncement;
-}
+export async function addField(field: Partial<Field>): Promise<Field> {
+  const res = await createFieldAction({
+    name: field.name || "Field",
+    spaceId: field.spaceId || "",
+    geom: field.geom || [],
+    currentCrop: field.current_crop || undefined,
+    thumb: field.thumb || undefined,
+  });
+  if (res.error || !res.fieldId) throw new Error(res.error || "Could not save the field");
 
-export function addAudit(action: string, targetType: string, targetId: string, meta?: any): void {
-  // Call server action - would insert audit log entry
-  console.log('Audit:', { action, targetType, targetId, meta });
+  const saved: Field = {
+    id: res.fieldId,
+    spaceId: field.spaceId || "",
+    ownerId: field.ownerId || "",
+    name: field.name || "Field",
+    geom: field.geom || [],
+    area: field.area || 0,
+    centroid: field.centroid || [0, 0],
+    place: field.place || { municipality: "", province: "" },
+    current_crop: field.current_crop || "",
+    archived: false,
+    thumb: field.thumb || "",
+  };
+  db.fields.push(saved);
+  return saved;
 }
 
 export async function updateField(fieldId: string, updates: Partial<Field>): Promise<void> {
-  const field = db.fields.find(f => f.id === fieldId);
-  if (field) {
-    Object.assign(field, updates);
-    persistFields();
-  }
+  const res = await updateFieldAction(fieldId, {
+    name: updates.name,
+    geom: updates.geom,
+    currentCrop: updates.current_crop,
+    thumb: updates.thumb,
+  });
+  if (res.error) throw new Error(res.error);
+  const field = db.fields.find((f) => f.id === fieldId);
+  if (field) Object.assign(field, updates);
 }
 
 export async function archiveField(fieldId: string): Promise<void> {
-  const field = db.fields.find(f => f.id === fieldId);
-  if (field) {
-    field.archived = true;
-    persistFields();
+  const res = await archiveFieldAction(fieldId);
+  if (res.error) throw new Error(res.error);
+  const field = db.fields.find((f) => f.id === fieldId);
+  if (field) field.archived = true;
+}
+
+export async function unarchiveField(fieldId: string): Promise<void> {
+  const res = await unarchiveFieldAction(fieldId);
+  if (res.error) throw new Error(res.error);
+  const field = db.fields.find((f) => f.id === fieldId);
+  if (field) field.archived = false;
+}
+
+export async function updateSpace(
+  spaceId: string,
+  updates: { name: string; description: string; status?: Space["status"] }
+): Promise<void> {
+  const res = await updateSpaceAction(spaceId, updates);
+  if (res.error) throw new Error(res.error);
+  const space = db.spaces.find((s) => s.id === spaceId);
+  if (space) {
+    space.name = updates.name;
+    space.desc = updates.description;
+    if (updates.status) space.status = updates.status;
   }
 }
 
-export async function addField(field: Partial<Field>): Promise<Field> {
-  const newField = {
-    ...field,
-    id: field.id || crypto.randomUUID(),
-  } as Field;
-  const existing = db.fields.findIndex((f) => f.id === newField.id);
-  if (existing >= 0) db.fields[existing] = newField;
-  else db.fields.push(newField);
-  persistFields();
-  return newField;
+export async function joinSpace(code: string): Promise<string> {
+  const form = new FormData();
+  form.set("code", code);
+  const res = await joinSpaceAction(form);
+  if (res.error) throw new Error(res.error);
+  return res.spaceId ?? "";
+}
+
+export async function leaveSpace(spaceId: string): Promise<void> {
+  const res = await leaveSpaceAction(spaceId);
+  if (res.error) throw new Error(res.error);
+  replace(
+    db.members,
+    db.members.filter((member) => member.spaceId !== spaceId)
+  );
 }
 
 export function removeEntries(entryIds: string[]): string[] {
-  const removed = entryIds.filter(id => db.entries.some(e => e.id === id));
-  db.entries = db.entries.filter(e => !entryIds.includes(e.id));
-  persistEntries();
+  const removed = entryIds.filter((id) => db.entries.some((e) => e.id === id));
+  replace(
+    db.entries,
+    db.entries.filter((e) => !entryIds.includes(e.id))
+  );
+  for (const id of removed) void deleteAssessment(id);
   return removed;
 }
 
 export function restoreEntries(entryIds: string[]): void {
-  // Restore from soft delete - in real implementation would unset deleted_at
-  console.log('Restore entries:', entryIds);
+  for (const id of entryIds) void restoreAssessment(id);
 }
 
-export async function markNotifRead(notifId: string): Promise<void> {
-  const notif = db.notifications.find(n => n.id === notifId);
-  if (notif) {
-    notif.read = true;
-  }
-}
-
-export async function markAllNotifsRead(userId: string): Promise<void> {
-  db.notifications.forEach(n => {
-    if (n.userId === userId) {
-      n.read = true;
-    }
+export async function addOutcome(outcome: {
+  fieldId: string;
+  entryId?: string;
+  crop: string;
+  result: string;
+  seasonEnd: string;
+  note?: string;
+}): Promise<void> {
+  const res = await submitOutcome({
+    fieldId: outcome.fieldId,
+    assessmentId: outcome.entryId,
+    cropId: outcome.crop,
+    resultTag: outcome.result as "good" | "average" | "poor" | "failed",
+    seasonEnd: outcome.seasonEnd as "this_week" | "this_month" | "last_month" | "earlier",
+    note: outcome.note,
+  });
+  if (res.error) throw new Error(res.error);
+  const now = Date.now();
+  db.outcomes.unshift({
+    id: res.outcomeId || `local-${now}`,
+    fieldId: outcome.fieldId,
+    entryId: outcome.entryId ?? null,
+    userId: db.users[0]?.id ?? null,
+    crop: outcome.crop,
+    result: outcome.result,
+    seasonEnd: outcome.seasonEnd,
+    note: outcome.note ?? null,
+    reviewStatus: "submitted",
+    createdAt: now,
   });
 }
 
+/** Announcements are created by the server action; the caller awaits it so a
+ *  failed broadcast is shown instead of silently appearing in the list. */
+export async function addAnnouncement(announcement: {
+  spaceId: string;
+  title: string;
+  body: string;
+}): Promise<Announcement | null> {
+  const { createAnnouncement } = await import("@/app/actions/spaces");
+  const res = await createAnnouncement(announcement);
+  if (res.error || !res.announcement) return null;
+  const saved: Announcement = {
+    id: res.announcement.id,
+    spaceId: announcement.spaceId,
+    title: announcement.title,
+    body: announcement.body,
+    by: res.announcement.created_by ?? "",
+    created: Date.parse(res.announcement.created_at) || Date.now(),
+  };
+  db.announcements.unshift(saved);
+  return saved;
+}
+
+/** Audit rows are written by the server actions. Kept for call-site
+ *  compatibility with the old admin UI. */
+export function addAudit(..._args: unknown[]): void {}
+
+export async function markNotifRead(notifId: string): Promise<void> {
+  const notif = db.notifications.find((n) => n.id === notifId);
+  if (notif) notif.read = true;
+  await markNotificationRead(notifId);
+}
+
+export async function markAllNotifsRead(userId: string): Promise<void> {
+  for (const n of db.notifications) if (n.userId === userId) n.read = true;
+  await markAllNotificationsRead();
+}
+
 export async function setUserRole(userId: string, role: "farmer" | "admin"): Promise<void> {
-  // Call server action
+  const res = await updateMemberRole(userId, role);
+  if (res.error) throw new Error(res.error);
+  const user = db.users.find((u) => u.id === userId);
+  if (user) user.role = role;
 }

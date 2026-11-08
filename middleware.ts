@@ -54,7 +54,12 @@ export async function middleware(request: NextRequest) {
 
   // Redirect to farmer if authenticated and on auth route
   if (user && isAuthRoute && !isJoinRoute) {
-    return NextResponse.redirect(new URL("/farmer", request.url));
+    const { data: profile } = await supabase
+      .from("profiles")
+      .select("role")
+      .eq("id", user.id)
+      .maybeSingle();
+    return NextResponse.redirect(new URL(profile?.role === "admin" ? "/admin" : "/farmer", request.url));
   }
 
   return response;

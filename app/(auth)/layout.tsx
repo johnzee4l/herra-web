@@ -1,16 +1,38 @@
-/* Auth and onboarding shell. These screens sit outside the farmer shell but
-   still need the app context (settings, toasts, overlays) and the app root
-   for breakpoints and theme. */
+/* Auth and onboarding shell. A signed-in visitor (for example following a
+   join link) gets their real profile and settings; a signed-out visitor gets
+   an empty guest context, never a demo identity. */
 
 import { AppProvider } from "@/lib/state";
 import { AppRoot } from "@/components/shell/AppRoot";
-import { ME, SPACES, mySpaces } from "@/lib/fixtures";
+import { DataBridge } from "@/lib/data/hydrate";
+import { loadBootstrap } from "@/lib/data/bootstrap";
+import { supabaseServer } from "@/lib/supabase/client";
+import { DEF_SETTINGS, type User } from "@/lib/types";
 
-export default function AuthLayout({ children }: { children: React.ReactNode }) {
-  const spaces = mySpaces(ME.id);
-  return (
-    <AppProvider user={ME} space={spaces[0] ?? SPACES[0]} spaces={spaces}>
+export const dynamic = "force-dynamic";
+
+const GUEST: User = {
+  id: "",
+  name: "",
+  email: "",
+  role: "farmer",
+  settings: DEF_SETTINGS,
+};
+
+export default async function AuthLayout({ children }: { children: React.ReactNode }) {
+  const sb = await supabaseServer();
+  const {
+    data: { user },
+  } = await sb.auth.getUser();
+
+  const data = user ? await loadBootstrap(user.id, user.email ?? "") : null;
+  const active = data?.user ?? GUEST;
+
+  const shell = (
+    <AppProvider user={active} space={data?.spaces[0] ?? null} spaces={data?.spaces ?? []}>
       <AppRoot>{children}</AppRoot>
     </AppProvider>
   );
+
+  return data ? <DataBridge data={data}>{shell}</DataBridge> : shell;
 }

@@ -9,6 +9,7 @@ import { useRouter, useSearchParams } from "next/navigation";
 import { Ic } from "@/components/ui/Ic";
 import { CropIcon } from "@/components/ui/CropIcon";
 import {
+  Alert,
   Badge,
   BlurFade,
   Btn,
@@ -29,7 +30,9 @@ import { fDT, fdate } from "@/lib/units/format";
 import { CLASS_L, WX, bandColor, wxIcon } from "@/lib/codes";
 import { CROPS } from "@/lib/spec/crops";
 import { topOf, weekFor } from "@/lib/fixtures";
+import { CROP_IDS } from "@/lib/spec/crops";
 import { addOutcome, db, liveEntry, liveField, liveMyEntries, liveMyFields } from "@/lib/store";
+import { useForecast } from "@/lib/useForecast";
 import { useDb } from "@/lib/useDb";
 import type { Entry } from "@/lib/types";
 
@@ -334,6 +337,12 @@ export function Planting() {
   const [cr, setCr] = useState(f?.current_crop || "maize");
   const [day, setDay] = useState(0);
   const wide = bp !== "xs" && bp !== "sm";
+  const storedWeek = f ? weekFor(f.id) : [];
+  const { week: forecast, loading: wxLoading, error: wxError } = useForecast(
+    f?.centroid[0],
+    f?.centroid[1],
+    storedWeek
+  );
 
   if (!f) {
     return (
@@ -349,7 +358,7 @@ export function Planting() {
   }
 
   const c = CROPS[cr];
-  const week = weekFor(f.id).map((d) => {
+  const week = forecast.map((d) => {
     const rainS = clamp(100 - d.pop * 1.1, 0, 100);
     const windS = clamp(100 - Math.max(0, d.wind - 15) * 3.2, 0, 100);
     const heatS = clamp(100 - Math.max(0, d.hi - (c.heat - 5)) * 16, 0, 100);
@@ -364,7 +373,18 @@ export function Planting() {
     };
   });
   const best = [...week].sort((a, b) => b.sc - a.sc).slice(0, 3).map((d) => d.ts);
-  const sel = week[day];
+  if (!week.length) {
+    return (
+      <ToolPage title="Planting window" sub="Scores each of the next 7 days for rain, wind, heat and soil moisture.">
+        <Alert tone="info" title={wxLoading ? "Fetching the forecast" : "Forecast unavailable"}>
+          {wxLoading
+            ? "Open-Meteo is returning the next 7 days for this field."
+            : wxError || "No forecast is available for this field yet."}
+        </Alert>
+      </ToolPage>
+    );
+  }
+  const sel = week[day] ?? week[0];
 
   const tips = [
     ...new Set(
@@ -389,7 +409,16 @@ export function Planting() {
       <div className="col g4">
         <div className="tag-row">
           {fl.map((x) => (
-            <Chip key={x.id} sm on={x.id === fid} icon="Polygon" onClick={() => setF(x.id)}>
+            <Chip
+              key={x.id}
+              sm
+              on={x.id === fid}
+              icon="Polygon"
+              onClick={() => {
+                setF(x.id);
+                setDay(0);
+              }}
+            >
               {x.name}
             </Chip>
           ))}
@@ -484,28 +513,38 @@ export function Outcomes() {
   const [note, setNote] = useState("");
 
   const rc = f
-    ? ([...new Set([f.current_crop, ...liveMyEntries(user.id).map((e) => topOf(e)?.crop), "rice", "maize", "cassava", "banana", "coconut", "cabbage"].filter(Boolean) as string[])]).slice(0, 8)
+    ? ([...new Set([f.current_crop, ...liveMyEntries(user.id).map((e) => topOf(e)?.crop), ...CROP_IDS].filter(Boolean) as string[])])
     : [];
 
   const mine = db.outcomes.filter((o) => o.userId === user.id);
 
-  const submit = () => {
+  const submit = async () => {
     if (!fid || !crop || !tag) return;
-    addOutcome({
-      id: uid("o"),
-      fieldId: fid,
-      entryId: pre?.id,
-      userId: user.id,
-      crop,
-      result: tag as never,
-      seasonEnd: end,
-      note,
-      createdAt: Date.now(),
-    });
-    haptic("ok");
-    toast("Outcome logged — thank you!", { icon: "Flag" });
-    setTag(null);
-    setNote("");
+    const seasonMap: Record<string, "this_week" | "this_month" | "last_month" | "earlier"> = {
+      "This week": "this_week",
+      "This month": "this_month",
+      "Last month": "last_month",
+      Earlier: "earlier",
+    };
+    try {
+      await addOutcome({
+        fieldId: fid,
+        entryId: pre?.id,
+        crop,
+        result: tag,
+        seasonEnd: seasonMap[end] ?? "this_month",
+        note,
+      });
+      haptic("ok");
+      toast("Outcome logged — thank you!", { icon: "Flag" });
+      setTag(null);
+      setNote("");
+    } catch (err) {
+      toast(err instanceof Error ? err.message : "Could not log the outcome", {
+        icon: "Warning",
+        tone: "heat",
+      });
+    }
   };
 
   return (
@@ -599,7 +638,7 @@ export function Outcomes() {
                     {CROPS[o.crop].name} · {o.result}
                   </div>
                   <div className="caption">
-                    {liveField(o.fieldId)?.name} · {o.seasonEnd}
+                    {o.fieldId ? liveField(o.fieldId)?.name ?? "Field" : "Field"} · {o.seasonEnd}
                   </div>
                 </div>
                 <Badge tone="heat" icon="Hourglass">

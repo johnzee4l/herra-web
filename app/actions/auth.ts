@@ -1,11 +1,10 @@
 "use server";
 
-/* Authentication actions (Blueprint section 6.1)
-   Sign up, sign in, sign out, password reset */
+/* Authentication actions (Blueprint section 6.1) */
 
 import { revalidatePath } from "next/cache";
 import { redirect } from "next/navigation";
-import { supabaseServer } from "@/lib/supabase/client";
+import { supabaseAdmin, supabaseServer } from "@/lib/supabase/client";
 import { z } from "zod";
 
 const signUpSchema = z.object({
@@ -19,45 +18,44 @@ const signInSchema = z.object({
   password: z.string().min(1, "Password is required"),
 });
 
-const resetPasswordSchema = z.object({
-  email: z.string().email("Invalid email address"),
-});
-
+const resetPasswordSchema = z.object({ email: z.string().email("Invalid email address") });
 const updatePasswordSchema = z.object({
   password: z.string().min(8, "Password must be at least 8 characters"),
 });
 
-export async function signUp(formData: FormData) {
-  const email = formData.get("email") as string;
-  const password = formData.get("password") as string;
-  const displayName = formData.get("displayName") as string;
+function safeRedirect(value: string | null) {
+  if (!value || !value.startsWith("/") || value.startsWith("//")) return "/farmer";
+  return value;
+}
 
-  // Validate
-  const result = signUpSchema.safeParse({ email, password, displayName });
-  if (!result.success) {
-    return { error: result.error.errors[0].message };
+export async function signUp(formData: FormData) {
+  const parsed = signUpSchema.safeParse({
+    email: String(formData.get("email") ?? "").trim().toLowerCase(),
+    password: String(formData.get("password") ?? ""),
+    displayName: String(formData.get("displayName") ?? "").trim(),
+  });
+  if (!parsed.success) return { error: parsed.error.errors[0].message };
+
+  const { email, password, displayName } = parsed.data;
+  const admin = supabaseAdmin();
+
+  /* Accounts are created pre-confirmed so a new farmer can enter the app
+     immediately; the public sign-up form is the only caller of this path. */
+  const { error: createError } = await admin.auth.admin.createUser({
+    email,
+    password,
+    email_confirm: true,
+    user_metadata: { display_name: displayName },
+  });
+  if (createError) {
+    if (/already/i.test(createError.message)) return { error: "That email is already registered" };
+    return { error: createError.message };
   }
 
   const supabase = await supabaseServer();
-
-  // Sign up
-  const { data, error } = await supabase.auth.signUp({
-    email,
-    password,
-    options: {
-      data: {
-        display_name: displayName,
-      },
-    },
-  });
-
-  if (error) {
-    return { error: error.message };
-  }
-
-  // If email confirmation is disabled, redirect to onboarding
-  if (data.user && !data.user.identities?.length) {
-    return { error: "Email already registered" };
+  const { error: signInError } = await supabase.auth.signInWithPassword({ email, password });
+  if (signInError) {
+    return { error: "Account created. Please sign in." };
   }
 
   revalidatePath("/", "layout");
@@ -65,27 +63,26 @@ export async function signUp(formData: FormData) {
 }
 
 export async function signIn(formData: FormData) {
-  const email = formData.get("email") as string;
-  const password = formData.get("password") as string;
-  const redirectTo = (formData.get("redirect") as string) || "/farmer";
-
-  // Validate
-  const result = signInSchema.safeParse({ email, password });
-  if (!result.success) {
-    return { error: result.error.errors[0].message };
-  }
+  const parsed = signInSchema.safeParse({
+    email: String(formData.get("email") ?? "").trim().toLowerCase(),
+    password: String(formData.get("password") ?? ""),
+  });
+  if (!parsed.success) return { error: parsed.error.errors[0].message };
 
   const supabase = await supabaseServer();
+  const { data, error } = await supabase.auth.signInWithPassword(parsed.data);
+  if (error) return { error: "Invalid email or password" };
 
-  const { error } = await supabase.auth.signInWithPassword({
-    email,
-    password,
-  });
-
-  if (error) {
-    return { error: "Invalid email or password" };
+  const requested = formData.get("redirect") as string | null;
+  let redirectTo = requested ? safeRedirect(requested) : "/farmer";
+  if (!requested && data.user) {
+    const { data: profile } = await supabase
+      .from("profiles")
+      .select("role")
+      .eq("id", data.user.id)
+      .maybeSingle();
+    if (profile?.role === "admin") redirectTo = "/admin";
   }
-
   revalidatePath("/", "layout");
   redirect(redirectTo);
 }
@@ -98,44 +95,43 @@ export async function signOut() {
 }
 
 export async function resetPassword(formData: FormData) {
-  const email = formData.get("email") as string;
-
-  const result = resetPasswordSchema.safeParse({ email });
-  if (!result.success) {
-    return { error: result.error.errors[0].message };
-  }
+  const parsed = resetPasswordSchema.safeParse({
+    email: String(formData.get("email") ?? "").trim().toLowerCase(),
+  });
+  if (!parsed.success) return { error: parsed.error.errors[0].message };
 
   const supabase = await supabaseServer();
-
-  const { error } = await supabase.auth.resetPasswordForEmail(email, {
-    redirectTo: `${process.env.NEXT_PUBLIC_SITE_URL}/reset-password`,
+  const site = process.env.NEXT_PUBLIC_SITE_URL || "http://localhost:3000";
+  const { error } = await supabase.auth.resetPasswordForEmail(parsed.data.email, {
+    redirectTo: `${site.replace(/\/$/, "")}/reset-password`,
   });
-
-  if (error) {
-    return { error: error.message };
-  }
-
+  if (error) return { error: error.message };
   return { success: true, message: "Check your email for the reset link" };
 }
 
 export async function updatePassword(formData: FormData) {
-  const password = formData.get("password") as string;
-
-  const result = updatePasswordSchema.safeParse({ password });
-  if (!result.success) {
-    return { error: result.error.errors[0].message };
-  }
+  const parsed = updatePasswordSchema.safeParse({
+    password: String(formData.get("password") ?? ""),
+  });
+  if (!parsed.success) return { error: parsed.error.errors[0].message };
 
   const supabase = await supabaseServer();
+  const { error } = await supabase.auth.updateUser({ password: parsed.data.password });
+  if (error) return { error: error.message };
+  return { success: true };
+}
 
-  const { error } = await supabase.auth.updateUser({
-    password,
-  });
+export async function saveSettings(settings: Record<string, unknown>) {
+  const supabase = await supabaseServer();
+  const {
+    data: { user },
+  } = await supabase.auth.getUser();
+  if (!user) return { error: "Unauthorized" };
 
-  if (error) {
-    return { error: error.message };
-  }
-
+  const { error } = await supabase.from("profiles").update({ settings }).eq("id", user.id);
+  if (error) return { error: error.message };
+  revalidatePath("/farmer/settings");
+  revalidatePath("/admin/settings");
   return { success: true };
 }
 
@@ -144,15 +140,7 @@ export async function getCurrentUser() {
   const {
     data: { user },
   } = await supabase.auth.getUser();
-  
   if (!user) return null;
-
-  // Get profile with role
-  const { data: profile } = await supabase
-    .from("profiles")
-    .select("*")
-    .eq("id", user.id)
-    .single();
-
+  const { data: profile } = await supabase.from("profiles").select("*").eq("id", user.id).single();
   return profile;
 }

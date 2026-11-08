@@ -244,7 +244,14 @@ export function AdminAnalytics() {
   const avgSuit = rec.length
     ? Math.round(rec.reduce((a, e) => a + topOf(e)!.match_pct, 0) / rec.length)
     : 0;
-  const hi = es.filter((e) => e.result!.reliability.tier === "high").length;
+  const relIndex = es.length
+    ? Math.round(
+        es.reduce((total, e) => {
+          const tier = e.result!.reliability.tier;
+          return total + (tier === "high" ? 100 : tier === "medium" ? 65 : 25);
+        }, 0) / es.length
+      )
+    : 0;
 
   return (
     <AdminPage
@@ -268,10 +275,10 @@ export function AdminAnalytics() {
         <Ring id="an2" value={avgSuit} size={104} suffix="%" label="Avg suitability" color="var(--primary)" />
         <Ring
           id="an3"
-          value={es.length ? Math.round((hi / es.length) * 100) : 0}
+          value={relIndex}
           size={104}
           suffix="%"
-          label="High reliability"
+          label="Reliability index"
           color="var(--growth)"
         />
         <Ring id="an4" value={rec.length} max={Math.max(10, rec.length)} size={104} label="Recommend runs" color="var(--sky)" />
@@ -312,9 +319,10 @@ export function AdminAnalytics() {
               },
             },
           ]}
-          rows={[...new Set(es.map((e) => e.spaceId))].map(
-            (id) => liveFields().find((f) => f.spaceId === id) && { id, name: id === "sp_victoria" ? "Victoria Growers" : "Socorro Upland Farmers" }
-          ).filter(Boolean) as { id: string; name: string }[]}
+          rows={[...new Set(es.map((e) => e.spaceId))].map((id) => ({
+            id,
+            name: db.spaces.find((space) => space.id === id)?.name ?? "Unknown space",
+          }))}
         />
       </div>
     </AdminPage>
@@ -375,7 +383,7 @@ export function OutcomeQueue() {
               <CropIcon id={o.crop} s={48} />
               <div className="grow" style={{ minWidth: 220 }}>
                 <div className="title-sm">
-                  {getUser(o.userId)?.name ?? "Farmer"} ·{" "}
+                  {(o.userId ? getUser(o.userId)?.name : null) ?? "Farmer"} ·{" "}
                   {liveFields().find((f) => f.id === o.fieldId)?.name ?? ""}
                 </div>
                 <div className="body-sm muted">

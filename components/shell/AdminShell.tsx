@@ -8,11 +8,12 @@ import Link from "next/link";
 import { usePathname, useRouter } from "next/navigation";
 import { useState, type ReactNode } from "react";
 import { Ic } from "@/components/ui/Ic";
-import { Avatar, Logo, Pop, Sel } from "@/components/ui/primitives";
+import { Avatar, Logo, Pop } from "@/components/ui/primitives";
 import { useApp } from "@/lib/state";
 import { cx } from "@/lib/utils";
-import { SPACES } from "@/lib/fixtures";
-import { champion } from "@/lib/admin";
+import { MODELS, champion } from "@/lib/admin";
+import { db } from "@/lib/store";
+import { signOut } from "@/app/actions/auth";
 
 type RailItem = [key: string, label: string, icon: string];
 
@@ -46,12 +47,28 @@ export function AdminShell({ children }: { children: ReactNode }) {
   const wide = w > 100;
 
   const champ = champion();
-
+  const pendingOutcomes = db.outcomes.filter((o) => o.reviewStatus === "submitted").length;
+  const promoted = MODELS.find((m) => m.status === "candidate" && m.gate_pass);
   const alerts = [
-    { ic: "Pulse", tone: "heat", t: "SoilGrids probe breaker is half-open", to: "/admin/data-health" },
-    { ic: "Flag", tone: "sky", t: "Outcomes await review", to: "/admin/outcomes" },
-    ...(champ
-      ? [{ ic: "Cpu", tone: "growth", t: "Candidate passed its gate", to: "/admin/models" }]
+    ...(pendingOutcomes
+      ? [
+          {
+            ic: "Flag",
+            tone: "sky",
+            t: `${pendingOutcomes} outcome${pendingOutcomes === 1 ? "" : "s"} await review`,
+            to: "/admin/outcomes",
+          },
+        ]
+      : []),
+    ...(promoted
+      ? [
+          {
+            ic: "Cpu",
+            tone: "growth",
+            t: `${promoted.name} passed its gate`,
+            to: "/admin/models",
+          },
+        ]
       : []),
   ];
 
@@ -106,16 +123,6 @@ export function AdminShell({ children }: { children: ReactNode }) {
         <div className="admin-main">
           <div className="admin-top">
             <div className="grow" />
-            <div style={{ width: 190 }}>
-              <Sel
-                v={"all"}
-                on={() => {
-                  toast("Space filter applies to lists in this build", { icon: "Stack", tone: "sky" });
-                }}
-                opts={[{ k: "all", l: "All spaces" }, ...SPACES.map((s) => ({ k: s.id, l: s.name }))]}
-              />
-            </div>
-
             <Pop
               align="right"
               btn={(tg) => (
@@ -153,10 +160,12 @@ export function AdminShell({ children }: { children: ReactNode }) {
                 Audit log
               </button>
               <hr />
-              <button className="danger" onClick={() => openSheet({ title: "Sign out", render: () => <div className="muted">Sign-out is wired to Supabase Auth in the product.</div> })}>
-                <Ic n="SignOut" s={18} />
-                Sign out
-              </button>
+              <form action={signOut}>
+                <button className="danger" type="submit">
+                  <Ic n="SignOut" s={18} />
+                  Sign out
+                </button>
+              </form>
             </Pop>
           </div>
 

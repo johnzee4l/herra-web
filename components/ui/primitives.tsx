@@ -180,8 +180,6 @@ export function TextAnimate({
 
 /* ---------- rings and meters ---------- */
 
-const seenRings = new Set<string>();
-
 export function Ring({
   value = 0,
   max = 100,
@@ -217,39 +215,15 @@ export function Ring({
   lblCls?: string;
   onClick?: () => void;
 }) {
-  const reduced = useReduced();
   const r = (size - stroke) / 2;
   const C = 2 * Math.PI * r;
-  const key = id || label + "|" + size + "|" + color;
-  const [v, setV] = useState(seenRings.has(key) || reduced ? value : 0);
-  const ref = useRef<HTMLDivElement | null>(null);
-
-  useEffect(() => {
-    if (seenRings.has(key) || reduced) {
-      setV(value);
-      return;
-    }
-    const io = new IntersectionObserver(
-      (es) => {
-        if (es[0].isIntersecting) {
-          seenRings.add(key);
-          setTimeout(() => setV(value), 80);
-          io.disconnect();
-        }
-      },
-      { threshold: 0.2 }
-    );
-    if (ref.current) io.observe(ref.current);
-    return () => io.disconnect();
-  }, [value, key, reduced]);
-
-  const n = useCount(v, 0);
-  const frac = clamp(v / max, 0, 1);
+  const n = value;
+  const frac = clamp(value / max, 0, 1);
   const fs = Math.round(size * (size > 150 ? 0.36 : 0.33));
 
   return (
     <div className="ring-wrap col" style={{ alignItems: "center" }} onClick={onClick}>
-      <div className="ring" ref={ref} style={{ width: size + "px", height: size + "px" }}>
+      <div className="ring" style={{ width: size + "px", height: size + "px" }}>
         <svg width={size} height={size}>
           <circle className="rtrack" cx={size / 2} cy={size / 2} r={r} strokeWidth={stroke} />
           <circle

@@ -14,7 +14,7 @@ interface PhotoPreviewProps {
   onRetake?: () => void;
 }
 
-export function PhotoPreview({ file, userId, onUploaded, onRetake }: PhotoPreviewProps) {
+export function PhotoPreview({ file, onUploaded, onRetake }: PhotoPreviewProps) {
   const [uploading, setUploading] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const [preview] = useState(() => URL.createObjectURL(file));
@@ -28,7 +28,7 @@ export function PhotoPreview({ file, userId, onUploaded, onRetake }: PhotoPrevie
       const processed = await processPhoto(file);
       
       // Upload to Supabase Storage
-      const result = await uploadFieldPhoto(processed, userId);
+      const result = await uploadFieldPhoto(processed);
       
       if (result.error) {
         setError(result.error);

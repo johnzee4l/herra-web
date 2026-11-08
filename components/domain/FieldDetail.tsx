@@ -30,6 +30,7 @@ import {
   liveEntriesOfField,
   liveField,
   liveOutcomesOfField,
+  unarchiveField,
   updateField,
 } from "@/lib/store";
 import { useDb } from "@/lib/useDb";
@@ -78,7 +79,9 @@ export function FieldDetail({ id }: { id: string }) {
           icon: "Archive",
           tone: "heat",
           action: "Undo",
-          onAction: () => updateField(f.id, { archived: false }),
+          onAction: () => {
+            void unarchiveField(f.id);
+          },
         });
       },
     });

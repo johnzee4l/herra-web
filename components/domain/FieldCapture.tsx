@@ -84,7 +84,7 @@ export function FieldCapture({ editId }: { editId?: string }) {
     );
   }
 
-  const save = () => {
+  const save = async () => {
     if (!meas?.ok || !meas.centroid) return;
     const nm = name.trim() || (place ? `${place.municipality} plot` : "New field");
     const geom = meas.pts;
@@ -92,31 +92,38 @@ export function FieldCapture({ editId }: { editId?: string }) {
     const centroid = meas.centroid;
     const pl = place ?? placeAt(centroid[0], centroid[1], spaceId);
 
-    if (ef) {
-      updateField(ef.id, { geom, centroid, area, place: pl, name: nm });
-      toast("Boundary updated", { icon: "PenNib" });
-      router.push(`/farmer/fields/${ef.id}`);
-      return;
-    }
+    try {
+      if (ef) {
+        await updateField(ef.id, { geom, centroid, area, place: pl, name: nm });
+        toast("Boundary updated", { icon: "PenNib" });
+        router.push(`/farmer/fields/${ef.id}`);
+        return;
+      }
 
-    const nf: FieldT = {
-      id: uid("f"),
-      spaceId,
-      ownerId: user.id,
-      name: nm,
-      geom,
-      area,
-      centroid,
-      place: { municipality: pl.municipality, province: pl.province },
-      current_crop: "rice",
-      thumb: thumbFor(geom),
-    };
-    addField(nf);
-    haptic("ok");
-    toast(nf.name + " saved", { icon: "Polygon" });
-    router.replace(
-      q.get("return") === "analyze" ? `/farmer/analyze?field=${nf.id}` : `/farmer/fields/${nf.id}`
-    );
+      const saved = await addField({
+        spaceId,
+        ownerId: user.id,
+        name: nm,
+        geom,
+        area,
+        centroid,
+        place: { municipality: pl.municipality, province: pl.province },
+        current_crop: "",
+        thumb: thumbFor(geom),
+      });
+      haptic("ok");
+      toast(saved.name + " saved", { icon: "Polygon" });
+      router.replace(
+        q.get("return") === "analyze"
+          ? `/farmer/analyze?field=${saved.id}`
+          : `/farmer/fields/${saved.id}`
+      );
+    } catch (err) {
+      toast(err instanceof Error ? err.message : "Could not save the field", {
+        icon: "Warning",
+        tone: "heat",
+      });
+    }
   };
 
   const ok = !!meas?.ok && !meas.live;

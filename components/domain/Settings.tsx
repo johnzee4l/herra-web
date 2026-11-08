@@ -4,7 +4,7 @@
    notifications, spaces, defaults. Settings persist to localStorage in this
    build; in the product they persist to profiles.settings. */
 
-import { useRef, useState, type ReactNode } from "react";
+import { useState, type ReactNode } from "react";
 import { useRouter } from "next/navigation";
 import { Ic } from "@/components/ui/Ic";
 import {
@@ -25,6 +25,7 @@ import { useApp } from "@/lib/state";
 import { t } from "@/lib/i18n/en";
 import { fA, fLong, fR, fT } from "@/lib/units/format";
 import { liveMySpaces } from "@/lib/store";
+import { signOut } from "@/app/actions/auth";
 
 type Tab = "profile" | "appearance" | "map" | "units" | "notif" | "spaces" | "defaults";
 
@@ -56,12 +57,11 @@ function SetRow({
   );
 }
 
-export function SettingsPage() {
-  const { bp, user, settings, setSettings, spaceId, setSpaceId, toast } = useApp();
+export function SettingsPage({ embedded = false }: { embedded?: boolean } = {}) {
+  const { bp, user, settings, setSettings, spaceId, setSpaceId } = useApp();
   const router = useRouter();
   const confirm = useConfirm();
   const [tab, setTab] = useState<Tab>("profile");
-  const fileRef = useRef<HTMLInputElement>(null);
   const wide = bp !== "xs" && bp !== "sm";
   const st = settings;
   const spaces = liveMySpaces(user.id);
@@ -76,42 +76,22 @@ export function SettingsPage() {
     { k: "defaults", l: "Defaults", i: "Sliders" },
   ];
 
-  return (
-    <Page title={t("settings")} wide>
-      <BlurFade>
-        <div className={wide ? "display-lg" : "display-md"} style={{ margin: "6px 0 20px" }}>
-          {t("settings")}
-        </div>
-      </BlurFade>
+  const titleBlock = (
+    <BlurFade>
+      <div className={wide ? "display-lg" : "display-md"} style={{ margin: "6px 0 20px" }}>
+        {t("settings")}
+      </div>
+    </BlurFade>
+  );
+  const tabsBlock = <Tabs opts={tabs} v={tab} on={setTab} />;
 
-      <Tabs opts={tabs} v={tab} on={setTab} />
-
+  const panel = (
       <div className="cap68 mt4" key={tab}>
         {tab === "profile" && (
           <div>
             <div className="row g4" style={{ padding: "8px 0 20px" }}>
               <div className="rel">
                 <Avatar u={user} sz="lg" />
-                <button
-                  className="iconbtn sm abs"
-                  style={{
-                    right: -6,
-                    bottom: -6,
-                    background: "var(--primary)",
-                    color: "var(--primary-fg)",
-                  }}
-                  aria-label="Upload photo"
-                  onClick={() => fileRef.current?.click()}
-                >
-                  <Ic n="Camera" w="fill" s={16} />
-                </button>
-                <input
-                  ref={fileRef}
-                  type="file"
-                  accept="image/*"
-                  style={{ display: "none" }}
-                  onChange={() => toast("Photo updated", { icon: "Camera" })}
-                />
               </div>
               <div>
                 <div className="title-md">{user.name}</div>
@@ -137,7 +117,9 @@ export function SettingsPage() {
                     title: "Sign out?",
                     body: "You can sign in again at any time.",
                     confirm: "Sign out",
-                    onOk: () => router.push("/sign-in"),
+                    onOk: () => {
+                      void signOut();
+                    },
                   })
                 }
               >
@@ -273,7 +255,11 @@ export function SettingsPage() {
                 label={sp.name}
                 sub={`${sp.place.municipality}, ${sp.place.province}`}
               >
-                <Btn cls="ghost" sz="sm" onClick={() => router.push(`/farmer/spaces/${sp.id}`)}>
+                <Btn
+                  cls="ghost"
+                  sz="sm"
+                  onClick={() => router.push(embedded ? `/admin/spaces/${sp.id}` : `/farmer/spaces/${sp.id}`)}
+                >
                   Open
                 </Btn>
               </SetRow>
@@ -325,6 +311,22 @@ export function SettingsPage() {
           </div>
         )}
       </div>
+  );
+
+  if (embedded) {
+    return (
+      <div>
+        {tabsBlock}
+        {panel}
+      </div>
+    );
+  }
+
+  return (
+    <Page title={t("settings")} wide>
+      {titleBlock}
+      {tabsBlock}
+      {panel}
     </Page>
   );
 }

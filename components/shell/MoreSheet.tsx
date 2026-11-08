@@ -2,8 +2,8 @@
 
 import Link from "next/link";
 import { Ic } from "@/components/ui/Ic";
-import { useApp } from "@/lib/state";
 import { t } from "@/lib/i18n/en";
+import { signOut } from "@/app/actions/auth";
 
 const ITEMS: [string, string, string][] = [
   ["spaces", "spaces", "Stack"],
@@ -14,7 +14,6 @@ const ITEMS: [string, string, string][] = [
 ];
 
 export function MoreSheet({ close }: { close: () => void }) {
-  const { toast } = useApp();
   return (
     <div className="col">
       {ITEMS.map(([k, lb, ic]) => (
@@ -24,16 +23,12 @@ export function MoreSheet({ close }: { close: () => void }) {
           <Ic n="CaretRight" s={16} c="var(--subtle)" />
         </Link>
       ))}
-      <button
-        className="rowitem hv"
-        onClick={() => {
-          close();
-          toast("Signed out", { icon: "SignOut", tone: "sky" });
-        }}
-      >
-        <Ic n="SignOut" w="duotone" s={28} c="var(--risk)" />
-        <span className="title-sm grow c-risk">Sign out</span>
-      </button>
+      <form action={signOut}>
+        <button className="rowitem hv" type="submit">
+          <Ic n="SignOut" w="duotone" s={28} c="var(--risk)" />
+          <span className="title-sm grow c-risk">Sign out</span>
+        </button>
+      </form>
     </div>
   );
 }

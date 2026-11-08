@@ -27,8 +27,7 @@ import { fA, fCoord, fdate, fTime } from "@/lib/units/format";
 import { CROPS, CROP_IDS } from "@/lib/spec/crops";
 import { liveMyFields, liveMySpaces } from "@/lib/store";
 import { useDb } from "@/lib/useDb";
-import { runAssessment } from "@/lib/env/assess";
-import { addEntry } from "@/lib/store";
+import { runAssessment, uploadFieldPhoto } from "@/app/actions/assessments";
 import { processPhoto } from "@/lib/media";
 import type { Entry, Field } from "@/lib/types";
 
@@ -232,20 +231,34 @@ export function Analyze() {
     if (!F || busy) return;
     setBusy(true);
     try {
-      const photo: Entry["photo"] = st.photo ?? { url: "" };
-      const entry = await runAssessment({
-        field: F,
+      let photoPath: string | undefined;
+      if (st.photo?.url?.startsWith("data:")) {
+        const blob = await (await fetch(st.photo.url)).blob();
+        const type = blob.type || "image/jpeg";
+        const ext = type === "image/png" ? "png" : type === "image/webp" ? "webp" : "jpg";
+        const file = new File([blob], `field.${ext}`, { type });
+        const uploaded = await uploadFieldPhoto(file);
+        if (uploaded.error) throw new Error(uploaded.error);
+        photoPath = uploaded.path;
+      }
+
+      const res = await runAssessment({
+        fieldId: F.id,
         mode: st.kind,
         moisture: st.moisture,
         currentCrop: st.kind === "checkup" ? st.crop || F.current_crop : undefined,
-        photo,
+        photoPath,
+        idempotencyKey: crypto.randomUUID(),
       });
-      const saved = await addEntry(entry);
-      router.replace(`/farmer/analyze/processing/${saved.id}`);
+      if (res.error || !res.assessmentId) throw new Error(res.error || "Assessment failed");
+      router.replace(`/farmer/entries/${res.assessmentId}`);
     } catch (err) {
       console.error("Assessment failed:", err);
       setBusy(false);
-      toast("Analysis failed. Please try again.", { icon: "Warning", tone: "heat" });
+      toast(err instanceof Error ? err.message : "Analysis failed. Please try again.", {
+        icon: "Warning",
+        tone: "heat",
+      });
     }
   };
 

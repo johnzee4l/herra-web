@@ -38,6 +38,21 @@ export const DEF_SETTINGS: Settings = {
   alertRain: 60,
 };
 
+/** Merge a stored (possibly partial or legacy) profile settings object with
+ *  the current defaults. Older profiles were seeded with `{}`; without this
+ *  every nested preference such as `notif.weather` is undefined. */
+export function normalizeSettings(value: unknown): Settings {
+  const raw =
+    value && typeof value === "object"
+      ? (value as Partial<Settings> & { notif?: Partial<Settings["notif"]> })
+      : {};
+  return {
+    ...DEF_SETTINGS,
+    ...raw,
+    notif: { ...DEF_SETTINGS.notif, ...(raw.notif ?? {}) },
+  };
+}
+
 export type CropFamily =
   | "cereal"
   | "root"

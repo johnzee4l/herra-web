@@ -182,7 +182,7 @@ export function EntryCard({
               <Ic n="CloudRain" s={14} w="fill" />
               7-day rain
             </span>
-            <b>{e.result?.week ? fR(sum(e.result.week.map((d) => d.rain)), settings) : "—"}</b>
+            <b>{e.result?.week?.length ? fR(sum(e.result.week.map((d) => d.rain)), settings) : "—"}</b>
           </div>
         </div>
       </div>

@@ -26,9 +26,10 @@ import {
   type ModelFeatures,
 } from "@/lib/hi/model";
 import type { Crop, SuitClass, WeekDay } from "@/lib/types";
+import { GRID_SAMPLE_SCHEMA_HASH } from "@/lib/env/grid-samples";
 
-/** Environment grid feature-schema hash (matches grid.json). */
-const GRID_SCHEMA_HASH = "sha256:23574559a5e5";
+/** Environment grid feature-schema hash (matches grid-samples.ts). */
+const GRID_SCHEMA_HASH = GRID_SAMPLE_SCHEMA_HASH;
 
 /* ---------- environment profile (blueprint 9.1) ---------- */
 
@@ -345,6 +346,17 @@ function relTier(
 function conditions(p: Profile, week: WeekDay[], moisture: number, crop: Crop) {
   const notes: { k: string; t: string; s: number }[] = [];
   let pen = 0;
+
+  // No forecast means no readiness adjustment. The suitability score still
+  // comes from the model; the response is marked degraded elsewhere.
+  if (!week.length) {
+    return {
+      mod: 1,
+      notes: [{ k: "weather", t: "The 7-day forecast is unavailable; readiness is not adjusted.", s: 0 }],
+      rain7: 0,
+      workable: 0,
+    };
+  }
   const rain7 = sum(week.map((d) => d.rain));
   const need = { low: [0, 45], moderate: [20, 85], high: [55, 160] }[crop.water];
 
@@ -524,6 +536,18 @@ function advise(req: HiRequest, res: HiResponse, subject: HiRankedCrop): HiAdvis
   const crop = CROPS[subject.crop];
   const week = res.week;
   const out: HiAdvisory[] = [];
+  if (!week.length) {
+    return [
+      {
+        id: "tip.moisture_recheck",
+        kind: "data",
+        severity: "info",
+        text: "The forecast is unavailable, so weather advisories and workable days are hidden for this assessment.",
+        impact: 0.4,
+        icon: "Info",
+      },
+    ];
+  }
   const be = bandEval(req.profile, crop);
   const wk = week.filter((d) => d.workable);
   const dn = (d: WeekDay) =>
@@ -784,7 +808,7 @@ export function assess(req: HiRequest): HiResponse {
   if (p.ood < 0.6 && sup === "typical") sup = "unusual";
   if (p.ood < 0.3) sup = "atypical";
 
-  const modeled = clamp(Math.round(req.week[0].rain / 10), 1, 5);
+  const modeled = req.week.length ? clamp(Math.round(req.week[0].rain / 10), 1, 5) : req.moisture;
   const flags: string[] = [];
   if (Math.abs(modeled - req.moisture) >= 2) flags.push("moisture_mismatch");
 
@@ -908,7 +932,9 @@ export function assess(req: HiRequest): HiResponse {
     );
     const hot = req.week.filter((d) => d.hi >= crop.heat).length;
     const cold = req.week.filter((d) => d.lo <= crop.b.tmean[0]).length;
-    const thermal = Math.round(clamp(100 * (1 - (hot + cold) / req.week.length), 0, 100));
+    const thermal = req.week.length
+      ? Math.round(clamp(100 * (1 - (hot + cold) / req.week.length), 0, 100))
+      : 0;
 
     const ck = (v: number | null, [a, b]: [number, number]) =>
       v === null ? null : v >= a && v <= b ? 1 : v >= a - 1 && v <= b + 1 ? 0.5 : 0;
@@ -927,9 +953,13 @@ export function assess(req: HiRequest): HiResponse {
     const gain = best ? Math.round((best.score - cur.score) * 100) : 0;
     const consider = best && gain >= 14 && reliability.tier !== "low" ? { crop: best.crop, gain } : null;
 
-    res.health = { index: hi, band, fit, water, thermal, soil };
     res.current = decorate(crop, cur);
-    res.consider = consider;
+    if (req.week.length) {
+      res.health = { index: hi, band, fit, water, thermal, soil };
+      res.consider = consider;
+    } else {
+      res.consider = null;
+    }
     res.top = decorate(CROPS[all[0].crop], all[0]);
     res.advisories = advise(req, res, res.current);
   }
